@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: check-all
+        name: lint and typecheck
+        entry: make check-all
+        language: system
+        pass_filenames: false
