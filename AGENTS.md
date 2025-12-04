@@ -9,6 +9,8 @@ make check-all   # Run before commit (lint + typecheck including notebooks)
 make format      # Auto-format with ruff
 ```
 
+Note: If `make` doesn't work, try `command make` or use full path.
+
 ## Stack
 
 - Python 3.13, uv
