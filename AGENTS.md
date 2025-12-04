@@ -24,3 +24,7 @@ make format      # Auto-format with ruff
 ## Type Annotations
 
 See `docs/types.md`
+
+## Documentation
+
+LangChain docs index: https://docs.langchain.com/llms.txt
