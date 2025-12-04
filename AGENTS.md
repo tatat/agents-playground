@@ -22,6 +22,7 @@ Note: If `make` doesn't work, try `command make` or use full path.
 ## Style
 
 - Comments and documentation in English
+- File naming: `snake_case` for Python files, `kebab-case` for others
 
 ## Type Annotations
 
