@@ -27,4 +27,5 @@ See `docs/types.md`
 
 ## Documentation
 
-LangChain docs index: https://docs.langchain.com/llms.txt
+- LangChain docs index: https://docs.langchain.com/llms.txt
+- For HTML version, remove `.md` from URL (e.g., `/persistence.md` → `/persistence`)
