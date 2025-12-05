@@ -30,6 +30,11 @@ See `docs/types.md`
 
 ## Documentation
 
-- LangChain docs index: https://docs.langchain.com/llms.txt
-- Anthropic Claude docs index: https://platform.claude.com/llms.txt
-- For HTML version, remove `.md` from URL (e.g., `/persistence.md` → `/persistence`)
+Reference links below are HTML (for humans). When reading docs, append `.md` for LLM-optimized markdown.
+
+- LangChain: https://docs.langchain.com
+  - Index: https://docs.langchain.com/llms.txt
+  - Example: `/persistence` → read `/persistence.md`
+- Anthropic Claude: https://platform.claude.com/docs
+  - Index: https://platform.claude.com/llms.txt
+  - Example: `/en/docs/agents-and-tools/tool-use` → read `/en/docs/agents-and-tools/tool-use.md`
