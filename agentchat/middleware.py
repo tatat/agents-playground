@@ -1,8 +1,9 @@
-"""Dynamic tool middleware for tool discovery pattern."""
+"""Custom middleware for agent functionality."""
 
 import json
 from typing import Any
 
+import rich
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.tools import BaseTool
 from langgraph.types import interrupt
@@ -80,3 +81,29 @@ class DynamicToolMiddleware(AgentMiddleware[Any, Any]):
         result = await handler(request)
         self._process_tool_search_result(request, result)
         return result
+
+
+class TokenUsageLoggingMiddleware(AgentMiddleware[Any, Any]):
+    """Middleware that logs token usage for each model call."""
+
+    def after_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:  # noqa: ARG002
+        """Log token usage after model call."""
+        # Get the last message from state which contains usage metadata
+        messages = state.get("messages", [])
+        if messages:
+            last_msg = messages[-1]
+            usage = getattr(last_msg, "usage_metadata", None)
+            if usage is not None:
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+
+                # Check for cache usage
+                input_details = usage.get("input_token_details", {})
+                cache_read = input_details.get("cache_read", 0)
+
+                if cache_read:
+                    rich.print(f"\n[dim]Tokens: {input_tokens} in (cache: {cache_read}) / {output_tokens} out[/dim]")
+                else:
+                    rich.print(f"\n[dim]Tokens: {input_tokens} in / {output_tokens} out[/dim]")
+
+        return None

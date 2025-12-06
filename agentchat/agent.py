@@ -12,7 +12,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph.state import CompiledStateGraph
 
 from .llm import create_chat_model
-from .middleware import DynamicToolMiddleware
+from .middleware import DynamicToolMiddleware, TokenUsageLoggingMiddleware
 from .tools import (
     TOOL_REGISTRY,
     create_execute_code_tool,
@@ -105,6 +105,7 @@ async def create_programmatic_agent(
         system_prompt=system_prompt or PROGRAMMATIC_SYSTEM_PROMPT,
         checkpointer=checkpointer,
         middleware=[
+            TokenUsageLoggingMiddleware(),
             SummarizationMiddleware(
                 model=model,
                 trigger=("fraction", 0.7),
@@ -188,6 +189,7 @@ class DirectModeAgentFactory:
         # Build middleware list
         middlewares: list[AgentMiddleware[Any, Any]] = [
             self.middleware,
+            TokenUsageLoggingMiddleware(),
             SummarizationMiddleware(
                 model=self.model,
                 trigger=("fraction", 0.7),
