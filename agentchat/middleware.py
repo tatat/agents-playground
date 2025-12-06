@@ -3,7 +3,6 @@
 import json
 from typing import Any
 
-import rich
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.tools import BaseTool
 from langgraph.types import interrupt
@@ -60,7 +59,6 @@ class DynamicToolMiddleware(AgentMiddleware[Any, Any]):
             if name in self.tool_registry and name not in self.discovered_tools:
                 self.discovered_tools.add(name)
                 new_discoveries = True
-        rich.print(f"[dim]Discovered tools: {self.discovered_tools}[/dim]")
 
         # Interrupt to allow tools to be added
         if new_discoveries:
