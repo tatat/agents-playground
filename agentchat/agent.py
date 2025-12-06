@@ -57,14 +57,12 @@ Use tool_search to find available tools, then use them to help the user."""
 async def create_programmatic_agent(
     model_name: str | None = None,
     system_prompt: str | None = None,
-    use_mcp: bool = True,
 ) -> tuple[CompiledStateGraph[Any], AsyncSqliteSaver, AsyncExitStack]:
     """Create a programmatic mode agent with sandbox execution.
 
     Args:
         model_name: The Claude model to use.
         system_prompt: Custom system prompt (optional).
-        use_mcp: Whether to load MCP tools from mcp_servers/ directory.
 
     Returns:
         Tuple of (agent, checkpointer, exit_stack). Caller must keep exit_stack
@@ -83,9 +81,9 @@ async def create_programmatic_agent(
     # Register built-in tools
     register_builtin_tools()
 
-    # Load MCP tools if enabled and servers exist
+    # Load MCP tools if servers exist
     exit_stack = AsyncExitStack()
-    if use_mcp and discover_mcp_servers():
+    if discover_mcp_servers():
         exit_stack, _ = await load_mcp_tools_to_registry()
 
     # Create execute_code tool with access to registry
@@ -136,11 +134,8 @@ class DirectModeAgentFactory:
         self.mcp_tools: list[BaseTool] = []
         self._exit_stack: AsyncExitStack | None = None
 
-    async def initialize(self, use_mcp: bool = True) -> AsyncExitStack:
+    async def initialize(self) -> AsyncExitStack:
         """Initialize the factory by registering tools and checkpointer.
-
-        Args:
-            use_mcp: Whether to load MCP tools.
 
         Returns:
             Exit stack for resource management.
@@ -155,7 +150,8 @@ class DirectModeAgentFactory:
             AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH))
         )
 
-        if use_mcp and discover_mcp_servers():
+        # Load MCP tools if servers exist
+        if discover_mcp_servers():
             mcp_stack, self.mcp_tools = await load_mcp_tools_to_registry()
             await exit_stack.enter_async_context(mcp_stack)
 
