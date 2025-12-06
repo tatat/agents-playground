@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain.agents.middleware import HumanInTheLoopMiddleware, SummarizationMiddleware
+from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph.state import CompiledStateGraph
@@ -103,6 +104,13 @@ async def create_programmatic_agent(
         tools=tools,
         system_prompt=system_prompt or PROGRAMMATIC_SYSTEM_PROMPT,
         checkpointer=checkpointer,
+        middleware=[
+            SummarizationMiddleware(
+                model=model,
+                trigger=("fraction", 0.7),
+                keep=("messages", 20),
+            ),
+        ],
     )
 
     return agent, checkpointer, exit_stack
@@ -178,7 +186,14 @@ class DirectModeAgentFactory:
                 tools.append(mcp_tool)
 
         # Build middleware list
-        middlewares: list[DynamicToolMiddleware | HumanInTheLoopMiddleware] = [self.middleware]
+        middlewares: list[AgentMiddleware[Any, Any]] = [
+            self.middleware,
+            SummarizationMiddleware(
+                model=self.model,
+                trigger=("fraction", 0.7),
+                keep=("messages", 20),
+            ),
+        ]
 
         # Add HITL middleware for discovered tools that require approval
         if self.hitl_tools and discovered_tools:
