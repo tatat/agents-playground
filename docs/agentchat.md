@@ -135,6 +135,32 @@ if __name__ == "__main__":
 
 Tools are automatically loaded and available via `tool_search`.
 
+## Persistence
+
+Conversation state is persisted to SQLite using LangGraph's `AsyncSqliteSaver`.
+
+- **Database**: `tmp/checkpoints.db`
+- **Format**: msgpack-serialized checkpoints
+
+### Dump Checkpoints
+
+```bash
+# Latest checkpoint (JSON)
+uv run python scripts/dump_checkpoints.py
+
+# List all threads
+uv run python scripts/dump_checkpoints.py -l
+
+# Multiple checkpoints
+uv run python scripts/dump_checkpoints.py -n 3
+
+# Filter by thread
+uv run python scripts/dump_checkpoints.py -t <thread_id>
+
+# With jq
+uv run python scripts/dump_checkpoints.py | jq '.[0].messages'
+```
+
 ## Key Bindings
 
 - `Ctrl+J` or `Alt+Enter`: Send message

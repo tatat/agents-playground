@@ -7,7 +7,7 @@ from typing import Any
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain_core.tools import BaseTool
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph.state import CompiledStateGraph
 
 from .llm import create_chat_model
@@ -24,6 +24,9 @@ from .tools.sandbox import is_srt_available
 
 # SRT sandbox settings (project root)
 SRT_SETTINGS_PATH = Path(__file__).parent.parent / "srt-settings.json"
+
+# SQLite checkpoint database path
+CHECKPOINT_DB_PATH = Path(__file__).parent.parent / "tmp" / "checkpoints.db"
 
 PROGRAMMATIC_SYSTEM_PROMPT = """You are a helpful assistant with programmatic tool calling capabilities.
 
@@ -93,7 +96,10 @@ async def create_programmatic_agent(
     model = create_chat_model(model_name)
 
     # Create checkpointer for conversation persistence
-    checkpointer = InMemorySaver()
+    CHECKPOINT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    checkpointer = await exit_stack.enter_async_context(
+        AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH))
+    )
 
     # Create the agent
     agent: CompiledStateGraph[Any] = create_agent(
@@ -124,26 +130,36 @@ class DirectModeAgentFactory:
         """
         self.model = create_chat_model(model_name)
         self.system_prompt = system_prompt or DIRECT_SYSTEM_PROMPT
-        self.checkpointer = InMemorySaver()
+        self.checkpointer: AsyncSqliteSaver | None = None
         self.middleware = DynamicToolMiddleware(TOOL_REGISTRY)
         self.hitl_tools = hitl_tools or set()
         self.mcp_tools: list[BaseTool] = []
+        self._exit_stack: AsyncExitStack | None = None
 
     async def initialize(self, use_mcp: bool = True) -> AsyncExitStack:
-        """Initialize the factory by registering tools.
+        """Initialize the factory by registering tools and checkpointer.
 
         Args:
             use_mcp: Whether to load MCP tools.
 
         Returns:
-            Exit stack for MCP session management.
+            Exit stack for resource management.
         """
         register_builtin_tools()
 
         exit_stack = AsyncExitStack()
-        if use_mcp and discover_mcp_servers():
-            exit_stack, self.mcp_tools = await load_mcp_tools_to_registry()
 
+        # Initialize SQLite checkpointer
+        CHECKPOINT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        self.checkpointer = await exit_stack.enter_async_context(
+            AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH))
+        )
+
+        if use_mcp and discover_mcp_servers():
+            mcp_stack, self.mcp_tools = await load_mcp_tools_to_registry()
+            await exit_stack.enter_async_context(mcp_stack)
+
+        self._exit_stack = exit_stack
         return exit_stack
 
     def create_agent(self, discovered_tools: set[str] | None = None) -> CompiledStateGraph[Any]:

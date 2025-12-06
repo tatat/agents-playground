@@ -124,7 +124,7 @@ async def stream_with_tool_discovery(
     if interrupted:
         return True
 
-    state = agent.get_state(config)
+    state = await agent.aget_state(config)
 
     if not (state.next and state.tasks):
         return False
