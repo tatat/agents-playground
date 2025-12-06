@@ -11,6 +11,10 @@ make format      # Auto-format with ruff
 
 Note: If `make` doesn't work, try `command make` or use full path.
 
+## Workspace
+
+Use `tmp/` (project root) for temporary files and debugging. This directory is gitignored.
+
 ## Stack
 
 - Python 3.13, uv
