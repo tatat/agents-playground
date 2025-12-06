@@ -29,3 +29,15 @@ CompiledStateGraph[StateT, ContextT, InputT, OutputT]
 | `OutputT` | Output schema | `StateT` |
 
 Only `StateT` is required. Use `Any` for simplicity.
+
+## `RunnableConfig` Type
+
+Use `RunnableConfig` for agent configuration with `thread_id`. It's a `TypedDict` so you can assign dict literals directly.
+
+```python
+from langchain_core.runnables import RunnableConfig
+
+config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+```
+
+No `cast()` needed.

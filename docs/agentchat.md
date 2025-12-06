@@ -66,6 +66,16 @@ uv run agentchat-programmatic
 
 Requires Node.js for `npx @anthropic-ai/sandbox-runtime`.
 
+### Resume Previous Session
+
+Use `--resume` (or `-r`) to select and resume a previous conversation:
+
+```bash
+uv run agentchat-direct --resume
+```
+
+This displays a list of saved threads with message count and preview, allowing you to continue where you left off. In direct mode, previously discovered tools are automatically restored.
+
 ## Architecture
 
 ```

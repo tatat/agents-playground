@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from prompt_toolkit import PromptSession
 
 from ..agent import create_programmatic_agent
+from ..resume import aselect_thread_interactive
 from ..ui import (
     console,
     print_error,
@@ -20,19 +21,31 @@ from ..ui import (
 from .common import create_key_bindings, process_stream_events
 
 
-async def programmatic_chat_loop() -> None:
-    """Run the programmatic mode chat loop."""
+async def programmatic_chat_loop(resume: bool = False) -> None:
+    """Run the programmatic mode chat loop.
+
+    Args:
+        resume: Whether to show thread selection for resuming.
+    """
     load_dotenv()
     print_welcome("programmatic")
 
     try:
-        agent, exit_stack = await create_programmatic_agent()
+        agent, checkpointer, exit_stack = await create_programmatic_agent()
     except RuntimeError as e:
         print_error(str(e))
         sys.exit(1)
 
-    thread_id = str(uuid4())
-    print_info(f"Session: {thread_id[:8]}...")
+    # Select thread if resuming
+    thread_id: str | None = None
+    if resume:
+        thread_id = await aselect_thread_interactive(checkpointer)
+
+    if thread_id is None:
+        thread_id = str(uuid4())
+        print_info(f"New session: {thread_id[:8]}...")
+    else:
+        print_info(f"Resuming session: {thread_id[:8]}...")
     console.print()
 
     config = cast(RunnableConfig, {"configurable": {"thread_id": thread_id}})

@@ -11,6 +11,7 @@ from prompt_toolkit import PromptSession
 
 from ..agent import DirectModeAgentFactory
 from ..middleware import DynamicToolMiddleware
+from ..resume import aget_discovered_tools, aselect_thread_interactive
 from ..ui import (
     console,
     print_error,
@@ -155,8 +156,12 @@ async def stream_with_tool_discovery(
     return False
 
 
-async def direct_chat_loop() -> None:
-    """Run the direct mode chat loop with dynamic tool discovery."""
+async def direct_chat_loop(resume: bool = False) -> None:
+    """Run the direct mode chat loop with dynamic tool discovery.
+
+    Args:
+        resume: Whether to show thread selection for resuming.
+    """
     load_dotenv()
     print_welcome("direct")
 
@@ -164,11 +169,28 @@ async def direct_chat_loop() -> None:
     factory = DirectModeAgentFactory(hitl_tools=set(HITL_TOOLS.keys()))
     exit_stack = await factory.initialize()
 
-    # Create initial agent (only tool_search)
-    agent = factory.create_agent()
+    # Select thread if resuming
+    thread_id: str | None = None
+    if resume and factory.checkpointer is not None:
+        thread_id = await aselect_thread_interactive(factory.checkpointer)
 
-    thread_id = str(uuid4())
-    print_info(f"Session: {thread_id[:8]}...")
+    # Restore discovered tools if resuming
+    restored_tools: set[str] = set()
+    if thread_id is not None and factory.checkpointer is not None:
+        restored_tools = await aget_discovered_tools(thread_id, factory.checkpointer)
+        factory.middleware.discovered_tools = restored_tools
+
+    # Create agent with restored tools (or just tool_search for new sessions)
+    agent = factory.create_agent(restored_tools or None)
+
+    if thread_id is None:
+        thread_id = str(uuid4())
+        print_info(f"New session: {thread_id[:8]}...")
+    else:
+        if restored_tools:
+            print_info(f"Resuming session: {thread_id[:8]}... (tools: {', '.join(restored_tools)})")
+        else:
+            print_info(f"Resuming session: {thread_id[:8]}...")
     console.print()
 
     config = cast(RunnableConfig, {"configurable": {"thread_id": thread_id}})

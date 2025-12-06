@@ -58,7 +58,7 @@ async def create_programmatic_agent(
     model_name: str | None = None,
     system_prompt: str | None = None,
     use_mcp: bool = True,
-) -> tuple[CompiledStateGraph[Any], AsyncExitStack]:
+) -> tuple[CompiledStateGraph[Any], AsyncSqliteSaver, AsyncExitStack]:
     """Create a programmatic mode agent with sandbox execution.
 
     Args:
@@ -67,8 +67,8 @@ async def create_programmatic_agent(
         use_mcp: Whether to load MCP tools from mcp_servers/ directory.
 
     Returns:
-        Tuple of (agent, exit_stack). Caller must keep exit_stack alive
-        for MCP tool usage.
+        Tuple of (agent, checkpointer, exit_stack). Caller must keep exit_stack
+        alive for MCP tool usage and checkpointer lifecycle.
 
     Raises:
         RuntimeError: If sandbox-runtime is not available.
@@ -109,7 +109,7 @@ async def create_programmatic_agent(
         checkpointer=checkpointer,
     )
 
-    return agent, exit_stack
+    return agent, checkpointer, exit_stack
 
 
 class DirectModeAgentFactory:
