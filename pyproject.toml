@@ -12,9 +12,20 @@ dependencies = [
     "langchain-core>=1.1.0",
     "langchain-mcp-adapters>=0.1.0",
     "langgraph>=1.0.4",
+    "prompt-toolkit>=3.0.0",
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",
 ]
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+packages = ["agentchat"]
+
+[project.scripts]
+agentchat-direct = "agentchat:main_direct"
+agentchat-programmatic = "agentchat:main_programmatic"
 
 [dependency-groups]
 dev = [

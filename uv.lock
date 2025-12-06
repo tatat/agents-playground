@@ -9,7 +9,7 @@ resolution-markers = [
 [[package]]
 name = "agents-playground"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "ipykernel" },
     { name = "jupyter" },
@@ -18,6 +18,7 @@ dependencies = [
     { name = "langchain-core" },
     { name = "langchain-mcp-adapters" },
     { name = "langgraph" },
+    { name = "prompt-toolkit" },
     { name = "python-dotenv" },
     { name = "rich" },
 ]
@@ -39,6 +40,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.1.0" },
     { name = "langchain-mcp-adapters", specifier = ">=0.1.0" },
     { name = "langgraph", specifier = ">=1.0.4" },
+    { name = "prompt-toolkit", specifier = ">=3.0.0" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "rich", specifier = ">=14.2.0" },
 ]
