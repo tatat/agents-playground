@@ -14,6 +14,7 @@ from ..middleware import DynamicToolMiddleware
 from ..ui import (
     console,
     print_error,
+    print_hitl_request,
     print_info,
     print_streaming_end,
     print_streaming_start,
@@ -21,20 +22,53 @@ from ..ui import (
 )
 from .common import create_key_bindings, process_stream_events
 
+# Tools that require human approval before execution
+HITL_TOOLS = {"send_email", "create_calendar_event"}
+
+
+async def prompt_hitl_decisions(
+    action_requests: list[dict[str, Any]],
+    session: PromptSession[str],
+) -> list[dict[str, Any]]:
+    """Prompt user for HITL decisions.
+
+    Args:
+        action_requests: List of action requests from interrupt.
+        session: Prompt session for user input.
+
+    Returns:
+        List of decisions (approve or reject).
+    """
+    decisions: list[dict[str, Any]] = []
+
+    for action in action_requests:
+        print_hitl_request(action)
+        response = await session.prompt_async("Approve? (y/n): ")
+        response = response.strip().lower()
+
+        if response in ("y", "yes"):
+            decisions.append({"type": "approve"})
+        else:
+            decisions.append({"type": "reject", "message": "User rejected"})
+
+    return decisions
+
 
 async def stream_with_tool_discovery(
     factory: DirectModeAgentFactory,
     agent: CompiledStateGraph[Any],
     input_or_command: dict[str, Any] | Command[Any],
     config: RunnableConfig,
+    session: PromptSession[str],
 ) -> bool:
-    """Stream agent and handle tool discovery interrupts recursively.
+    """Stream agent and handle tool discovery/HITL interrupts recursively.
 
     Args:
         factory: Agent factory for creating new agents.
         agent: Current agent instance.
         input_or_command: Input message or resume command.
         config: Runnable config with thread_id.
+        session: Prompt session for user input.
 
     Returns:
         True if interrupted, False otherwise.
@@ -53,13 +87,26 @@ async def stream_with_tool_discovery(
 
     for task in state.tasks:
         for intr in task.interrupts:
+            # Handle tool discovery interrupts
             if intr.value.get("type") == DynamicToolMiddleware.INTERRUPT_TYPE:
                 discovered = intr.value.get("discovered_tools", [])
                 print_info(f"Discovered tools: {discovered}")
 
                 # Recreate agent with discovered tools and resume
                 new_agent = factory.create_agent(set(discovered))
-                return await stream_with_tool_discovery(factory, new_agent, Command(resume={}), config)
+                return await stream_with_tool_discovery(
+                    factory, new_agent, Command(resume={}), config, session
+                )
+
+            # Handle HITL interrupts
+            if "action_requests" in intr.value:
+                action_requests = intr.value["action_requests"]
+                decisions = await prompt_hitl_decisions(action_requests, session)
+
+                print_streaming_start()
+                return await stream_with_tool_discovery(
+                    factory, agent, Command(resume={"decisions": decisions}), config, session
+                )
 
     return False
 
@@ -69,8 +116,8 @@ async def direct_chat_loop() -> None:
     load_dotenv()
     print_welcome("direct")
 
-    # Create agent factory
-    factory = DirectModeAgentFactory()
+    # Create agent factory with HITL tools
+    factory = DirectModeAgentFactory(hitl_tools=HITL_TOOLS)
     exit_stack = await factory.initialize()
 
     # Create initial agent (only tool_search)
@@ -104,6 +151,7 @@ async def direct_chat_loop() -> None:
                     agent,
                     {"messages": [{"role": "user", "content": user_input}]},
                     config,
+                    session,
                 )
 
                 print_streaming_end()

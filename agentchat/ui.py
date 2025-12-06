@@ -170,3 +170,23 @@ def format_message(message: HumanMessage | AIMessage | ToolMessage) -> None:
                         print_tool_call(item.get("name", "unknown"), item.get("input", {}))
     elif isinstance(message, ToolMessage):
         print_tool_result(message.name or "unknown", str(message.content))
+
+
+def print_hitl_request(action: dict[str, Any]) -> None:
+    """Print a HITL approval request.
+
+    Args:
+        action: Action request with "name" and "args" keys.
+    """
+    name = action.get("name", "unknown")
+    args = action.get("args", {})
+    args_str = "\n".join(f"  {k}: {v!r}" for k, v in args.items())
+
+    console.print()
+    console.print(
+        Panel(
+            f"[bold]{name}[/bold]\n\n{args_str}",
+            title="[yellow]Approval Required[/yellow]",
+            border_style="yellow",
+        )
+    )

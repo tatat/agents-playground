@@ -4,6 +4,7 @@ from contextlib import AsyncExitStack
 from typing import Any
 
 from langchain.agents import create_agent
+from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import InMemorySaver
@@ -108,17 +109,20 @@ class DirectModeAgentFactory:
         self,
         model_name: str = "claude-sonnet-4-5-20250929",
         system_prompt: str | None = None,
+        hitl_tools: set[str] | None = None,
     ):
         """Initialize the factory.
 
         Args:
             model_name: The Claude model to use.
             system_prompt: Custom system prompt (optional).
+            hitl_tools: Tool names that require human approval before execution.
         """
         self.model = ChatAnthropic(model=model_name)
         self.system_prompt = system_prompt or DIRECT_SYSTEM_PROMPT
         self.checkpointer = InMemorySaver()
         self.middleware = DynamicToolMiddleware(TOOL_REGISTRY)
+        self.hitl_tools = hitl_tools or set()
         self.mcp_tools: list[BaseTool] = []
 
     async def initialize(self, use_mcp: bool = True) -> AsyncExitStack:
@@ -159,10 +163,21 @@ class DirectModeAgentFactory:
             if discovered_tools and mcp_tool.name in discovered_tools:
                 tools.append(mcp_tool)
 
+        # Build middleware list
+        middlewares: list[DynamicToolMiddleware | HumanInTheLoopMiddleware] = [self.middleware]
+
+        # Add HITL middleware for discovered tools that require approval
+        if self.hitl_tools and discovered_tools:
+            hitl_targets = self.hitl_tools & discovered_tools
+            if hitl_targets:
+                middlewares.append(
+                    HumanInTheLoopMiddleware(interrupt_on={name: True for name in hitl_targets})
+                )
+
         return create_agent(
             model=self.model,
             tools=tools,
             system_prompt=self.system_prompt,
-            middleware=[self.middleware],
+            middleware=middlewares,
             checkpointer=self.checkpointer,
         )
