@@ -70,6 +70,7 @@ def create_execute_code_tool(
         - print(): Output results (only printed text is returned)
 
         The code runs in an isolated environment with no filesystem or network access.
+        Communication uses JSON-RPC 2.0 protocol over stdout/stdin.
 
         Example:
             sales = await tool_call("query_sales", region="west")
@@ -86,38 +87,51 @@ def create_execute_code_tool(
         # Indent user code for async main()
         indented_code = "\n".join("    " + line for line in code.split("\n"))
 
+        # JSON-RPC 2.0 wrapper
         wrapper = f'''
 import asyncio
 import json
 import sys
 
-async def tool_call(name, **kwargs):
-    """Call a tool on the host via stdout/stdin protocol."""
-    request = {{"name": name, "kwargs": kwargs}}
-    sys.stdout.write(f"__TOOL_REQUEST__{{json.dumps(request)}}__END_REQUEST__\\n")
-    sys.stdout.flush()
-    response_line = sys.stdin.readline().strip()
-    return json.loads(response_line)
+_request_id = 0
 
-_output_lines = []
+async def tool_call(name, **kwargs):
+    """Call a tool on the host via JSON-RPC 2.0."""
+    global _request_id
+    _request_id += 1
+    request = {{
+        "jsonrpc": "2.0",
+        "method": name,
+        "params": kwargs,
+        "id": _request_id
+    }}
+    sys.stdout.write(json.dumps(request) + "\\n")
+    sys.stdout.flush()
+    response = json.loads(sys.stdin.readline().strip())
+    if "error" in response:
+        raise Exception(f"Tool error: {{response['error']['message']}}")
+    return response["result"]
+
 _original_print = print
 def print(*args, **kwargs):
+    """Print via JSON-RPC 2.0 notification."""
     import io
     buf = io.StringIO()
     kwargs["file"] = buf
     _original_print(*args, **kwargs)
-    _output_lines.append(buf.getvalue())
+    text = buf.getvalue()
+    notification = {{
+        "jsonrpc": "2.0",
+        "method": "print",
+        "params": {{"text": text}}
+    }}
+    sys.stdout.write(json.dumps(notification) + "\\n")
+    sys.stdout.flush()
 
 async def main():
 {indented_code}
 
 asyncio.run(main())
-
-sys.stdout.write("__USER_OUTPUT__\\n")
-sys.stdout.flush()
-for line in _output_lines:
-    sys.stdout.write(line)
-sys.stdout.flush()
 '''
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -143,7 +157,6 @@ sys.stdout.flush()
             proc_stderr = proc.stderr
 
             output_lines: list[str] = []
-            user_output_started = False
 
             timed_out = False
             while True:
@@ -156,15 +169,26 @@ sys.stdout.flush()
                 if not line_bytes:
                     break
 
-                line = line_bytes.decode()
+                line = line_bytes.decode().strip()
+                if not line:
+                    continue
 
-                if "__TOOL_REQUEST__" in line:
-                    start = line.index("__TOOL_REQUEST__") + len("__TOOL_REQUEST__")
-                    end = line.index("__END_REQUEST__")
-                    request = json.loads(line[start:end])
+                # Parse JSON-RPC message
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
-                    tool_name = request["name"]
-                    tool_kwargs = request["kwargs"]
+                # Check if notification (no id) or request (has id)
+                if "id" not in msg:
+                    # Notification: handle print
+                    if msg.get("method") == "print":
+                        output_lines.append(msg["params"]["text"])
+                else:
+                    # Request: tool call
+                    request_id = msg["id"]
+                    tool_name = msg["method"]
+                    tool_kwargs = msg.get("params", {})
 
                     if tool_name in registry:
                         tool_obj = registry[tool_name]
@@ -179,18 +203,24 @@ sys.stdout.flush()
                             try:
                                 call_result = json.loads(raw_result)
                             except json.JSONDecodeError:
-                                call_result = {"result": raw_result}
+                                call_result = raw_result
                         else:
                             call_result = raw_result
-                    else:
-                        call_result = {"error": f"Unknown tool: {tool_name}"}
 
-                    proc_stdin.write((json.dumps(call_result) + "\n").encode())
+                        response = {
+                            "jsonrpc": "2.0",
+                            "result": call_result,
+                            "id": request_id,
+                        }
+                    else:
+                        response = {
+                            "jsonrpc": "2.0",
+                            "error": {"code": -32601, "message": f"Tool not found: {tool_name}"},
+                            "id": request_id,
+                        }
+
+                    proc_stdin.write((json.dumps(response) + "\n").encode())
                     await proc_stdin.drain()
-                elif "__USER_OUTPUT__" in line:
-                    user_output_started = True
-                elif user_output_started:
-                    output_lines.append(line)
 
             # Kill process if timed out
             if timed_out:
