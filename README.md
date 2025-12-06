@@ -16,8 +16,9 @@ uv run pre-commit install
 # Jupyter Notebook
 uv run jupyter notebook
 
-# Run script
-uv run python main.py
+# CLI Chat (see docs/agentchat.md)
+uv run agentchat-direct
+uv run agentchat-programmatic
 ```
 
 ## Development
