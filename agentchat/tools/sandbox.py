@@ -158,9 +158,18 @@ sys.stdout.flush()
                         tool_obj = registry[tool_name]
                         # Use ainvoke for async tools (like MCP tools)
                         if hasattr(tool_obj, "coroutine") and tool_obj.coroutine is not None:
-                            call_result = await tool_obj.ainvoke(tool_kwargs)
+                            raw_result = await tool_obj.ainvoke(tool_kwargs)
                         else:
-                            call_result = tool_obj.invoke(tool_kwargs)
+                            raw_result = tool_obj.invoke(tool_kwargs)
+
+                        # MCP tools may return JSON strings - parse if needed
+                        if isinstance(raw_result, str):
+                            try:
+                                call_result = json.loads(raw_result)
+                            except json.JSONDecodeError:
+                                call_result = {"result": raw_result}
+                        else:
+                            call_result = raw_result
                     else:
                         call_result = {"error": f"Unknown tool: {tool_name}"}
 
