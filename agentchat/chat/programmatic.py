@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from prompt_toolkit import PromptSession
 
 from ..agent import create_programmatic_agent
-from ..resume import aselect_thread_interactive
+from ..resume import aget_messages, aselect_thread_interactive, print_recent_messages
 from ..ui import (
     console,
     print_error,
@@ -46,6 +46,9 @@ async def programmatic_chat_loop(resume: bool = False) -> None:
         print_info(f"New session: {thread_id[:8]}...")
     else:
         print_info(f"Resuming session: {thread_id[:8]}...")
+        # Show recent conversation
+        messages = await aget_messages(thread_id, checkpointer)
+        print_recent_messages(messages, console)
     console.print()
 
     config = cast(RunnableConfig, {"configurable": {"thread_id": thread_id}})

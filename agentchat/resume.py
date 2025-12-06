@@ -33,6 +33,28 @@ def _get_first_human_message_preview(messages: list[Any]) -> str:
     return ""
 
 
+async def aget_messages(
+    thread_id: str, checkpointer: "BaseCheckpointSaver[Any]"
+) -> list[Any]:
+    """Get messages from a thread checkpoint.
+
+    Args:
+        thread_id: The thread ID to get messages for.
+        checkpointer: The checkpointer to query.
+
+    Returns:
+        List of messages from the thread.
+    """
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    checkpoint_tuple = await checkpointer.aget_tuple(config)
+
+    if not checkpoint_tuple:
+        return []
+
+    messages: list[Any] = checkpoint_tuple.checkpoint.get("channel_values", {}).get("messages", [])
+    return messages
+
+
 async def aget_discovered_tools(
     thread_id: str, checkpointer: "BaseCheckpointSaver[Any]"
 ) -> set[str]:
@@ -45,14 +67,58 @@ async def aget_discovered_tools(
     Returns:
         Set of tool names that were used in the thread.
     """
-    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
-    checkpoint_tuple = await checkpointer.aget_tuple(config)
-
-    if not checkpoint_tuple:
-        return set()
-
-    messages = checkpoint_tuple.checkpoint.get("channel_values", {}).get("messages", [])
+    messages = await aget_messages(thread_id, checkpointer)
     return _extract_tools_from_messages(messages)
+
+
+def print_recent_messages(messages: list[Any], console: Console, limit: int = 4) -> None:
+    """Print recent conversation messages.
+
+    Args:
+        messages: List of messages from checkpoint.
+        console: Rich console for output.
+        limit: Maximum number of message pairs to show.
+    """
+    # Filter to Human and AI messages only (skip tool messages)
+    display_messages: list[tuple[str, str]] = []
+    for msg in messages:
+        msg_type = type(msg).__name__
+        if msg_type == "HumanMessage":
+            content = msg.content
+            if isinstance(content, str):
+                display_messages.append(("user", content))
+        elif msg_type == "AIMessage":
+            content = msg.content
+            # Handle both string and list content
+            if isinstance(content, str):
+                text = content
+            elif isinstance(content, list):
+                # Extract text from content blocks
+                text_parts = [
+                    block.get("text", "")
+                    for block in content
+                    if isinstance(block, dict) and block.get("type") == "text"
+                ]
+                text = " ".join(text_parts)
+            else:
+                continue
+            if text.strip():
+                display_messages.append(("assistant", text))
+
+    if not display_messages:
+        return
+
+    # Show last N messages
+    recent = display_messages[-limit:]
+
+    console.print("[dim]── Recent conversation ──[/dim]")
+    for role, content in recent:
+        if role == "user":
+            console.print(f"[cyan]You:[/cyan] {content}")
+        else:
+            console.print(f"[green]AI:[/green] {content}")
+    console.print("[dim]──────────────────────────[/dim]")
+    console.print()
 
 
 async def aget_thread_summaries(

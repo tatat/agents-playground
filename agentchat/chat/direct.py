@@ -11,7 +11,12 @@ from prompt_toolkit import PromptSession
 
 from ..agent import DirectModeAgentFactory
 from ..middleware import DynamicToolMiddleware
-from ..resume import aget_discovered_tools, aselect_thread_interactive
+from ..resume import (
+    _extract_tools_from_messages,
+    aget_messages,
+    aselect_thread_interactive,
+    print_recent_messages,
+)
 from ..ui import (
     console,
     print_error,
@@ -174,10 +179,12 @@ async def direct_chat_loop(resume: bool = False) -> None:
     if resume and factory.checkpointer is not None:
         thread_id = await aselect_thread_interactive(factory.checkpointer)
 
-    # Restore discovered tools if resuming
+    # Restore discovered tools and messages if resuming
     restored_tools: set[str] = set()
+    restored_messages: list[Any] = []
     if thread_id is not None and factory.checkpointer is not None:
-        restored_tools = await aget_discovered_tools(thread_id, factory.checkpointer)
+        restored_messages = await aget_messages(thread_id, factory.checkpointer)
+        restored_tools = _extract_tools_from_messages(restored_messages)
         factory.middleware.discovered_tools = restored_tools
 
     # Create agent with restored tools (or just tool_search for new sessions)
@@ -191,6 +198,8 @@ async def direct_chat_loop(resume: bool = False) -> None:
             print_info(f"Resuming session: {thread_id[:8]}... (tools: {', '.join(restored_tools)})")
         else:
             print_info(f"Resuming session: {thread_id[:8]}...")
+        # Show recent conversation
+        print_recent_messages(restored_messages, console)
     console.print()
 
     config = cast(RunnableConfig, {"configurable": {"thread_id": thread_id}})
