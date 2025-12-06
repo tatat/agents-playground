@@ -1,4 +1,4 @@
-.PHONY: lint format check typecheck typecheck-nb check-all nb2md
+.PHONY: lint format check typecheck typecheck-nb check-all nb2md pages
 
 lint:
 	uv run ruff check .
@@ -20,3 +20,8 @@ check-all: check typecheck-nb
 # Usage: make nb2md NB=notebooks/example.ipynb
 nb2md:
 	@uv run jupyter nbconvert --to markdown --stdout --config nbconvert_templates/config.py --template plaintext $(NB)
+
+# Generate pages from notebooks with llms.txt
+# Usage: make pages [OUTPUT=./pages]
+pages:
+	@./scripts/generate-pages.sh $(if $(OUTPUT),--output $(OUTPUT),)
