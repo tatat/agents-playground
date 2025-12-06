@@ -4,6 +4,8 @@
     "deniedDomains": []
   },
   "filesystem": {
-    "allowWrite": []
+    "allowWrite": [],
+    "denyRead": [],
+    "denyWrite": []
   }
 }
