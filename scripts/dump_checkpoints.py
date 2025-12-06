@@ -27,9 +27,7 @@ def message_to_dict(msg: Any) -> dict[str, Any]:
     return result
 
 
-def dump_checkpoint(
-    db_path: Path, thread_id: str | None = None, limit: int = 1
-) -> list[dict[str, Any]]:
+def dump_checkpoint(db_path: Path, thread_id: str | None = None, limit: int = 1) -> list[dict[str, Any]]:
     """Dump checkpoints as JSON-serializable dicts."""
     if not db_path.exists():
         return []
@@ -55,11 +53,13 @@ def dump_checkpoint(
         data = serde.loads_typed(("msgpack", checkpoint_blob))
         messages = data.get("channel_values", {}).get("messages", [])
 
-        results.append({
-            "thread_id": tid,
-            "checkpoint_id": cid,
-            "messages": [message_to_dict(m) for m in messages],
-        })
+        results.append(
+            {
+                "thread_id": tid,
+                "checkpoint_id": cid,
+                "messages": [message_to_dict(m) for m in messages],
+            }
+        )
 
     return results
 
@@ -75,10 +75,7 @@ def list_threads(db_path: Path) -> list[dict[str, Any]]:
         "FROM checkpoints GROUP BY thread_id ORDER BY latest DESC"
     )
 
-    return [
-        {"thread_id": tid, "checkpoint_count": count, "latest_checkpoint": latest}
-        for tid, count, latest in cursor
-    ]
+    return [{"thread_id": tid, "checkpoint_count": count, "latest_checkpoint": latest} for tid, count, latest in cursor]
 
 
 def main() -> None:

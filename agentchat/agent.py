@@ -95,9 +95,7 @@ async def create_programmatic_agent(
 
     # Create checkpointer for conversation persistence
     CHECKPOINT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    checkpointer = await exit_stack.enter_async_context(
-        AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH))
-    )
+    checkpointer = await exit_stack.enter_async_context(AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH)))
 
     # Create the agent
     agent: CompiledStateGraph[Any] = create_agent(

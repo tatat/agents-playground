@@ -1,5 +1,6 @@
 """Thread selection for resuming conversations."""
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.runnables import RunnableConfig
@@ -12,14 +13,33 @@ if TYPE_CHECKING:
 
 
 def _extract_tools_from_messages(messages: list[Any]) -> set[str]:
-    """Extract tool names from message list."""
+    """Extract tool names from message list.
+
+    Extracts both:
+    - Tools that were actually called (from ToolMessage.name)
+    - Tools discovered via tool_search (from ToolMessage.content)
+    """
     tools: set[str] = set()
     for msg in messages:
         if type(msg).__name__ == "ToolMessage":
-            if hasattr(msg, "name") and msg.name:
-                # Skip tool_search itself
-                if msg.name != "tool_search":
-                    tools.add(msg.name)
+            if not hasattr(msg, "name") or not msg.name:
+                continue
+
+            if msg.name == "tool_search":
+                # Extract discovered tools from tool_search result
+                content = msg.content
+                if isinstance(content, str):
+                    try:
+                        content = json.loads(content)
+                    except json.JSONDecodeError:
+                        continue
+                if isinstance(content, dict):
+                    for t in content.get("tools", []):
+                        if isinstance(t, dict) and isinstance(t.get("name"), str):
+                            tools.add(t["name"])
+            else:
+                # Tool that was actually called
+                tools.add(msg.name)
     return tools
 
 
@@ -33,9 +53,7 @@ def _get_first_human_message_preview(messages: list[Any]) -> str:
     return ""
 
 
-async def aget_messages(
-    thread_id: str, checkpointer: "BaseCheckpointSaver[Any]"
-) -> list[Any]:
+async def aget_messages(thread_id: str, checkpointer: "BaseCheckpointSaver[Any]") -> list[Any]:
     """Get messages from a thread checkpoint.
 
     Args:
@@ -55,9 +73,7 @@ async def aget_messages(
     return messages
 
 
-async def aget_discovered_tools(
-    thread_id: str, checkpointer: "BaseCheckpointSaver[Any]"
-) -> set[str]:
+async def aget_discovered_tools(thread_id: str, checkpointer: "BaseCheckpointSaver[Any]") -> set[str]:
     """Extract tool names used in a thread from checkpointer.
 
     Args:
@@ -145,11 +161,13 @@ async def aget_thread_summaries(
         seen_threads.add(thread_id)
         messages = checkpoint_tuple.checkpoint.get("channel_values", {}).get("messages", [])
 
-        results.append({
-            "thread_id": thread_id,
-            "message_count": len(messages),
-            "preview": _get_first_human_message_preview(messages),
-        })
+        results.append(
+            {
+                "thread_id": thread_id,
+                "message_count": len(messages),
+                "preview": _get_first_human_message_preview(messages),
+            }
+        )
 
     return results
 
@@ -198,9 +216,7 @@ async def aselect_thread_interactive(
     session: PromptSession[str] = PromptSession()
     while True:
         try:
-            response = await session.prompt_async(
-                f"Select thread (1-{len(threads)}) or 'n' for new: "
-            )
+            response = await session.prompt_async(f"Select thread (1-{len(threads)}) or 'n' for new: ")
             response = response.strip().lower()
 
             if response == "n":
