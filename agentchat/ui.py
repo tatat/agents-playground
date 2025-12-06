@@ -82,7 +82,9 @@ def print_tool_call(name: str, args: dict[str, Any]) -> None:
         name: Tool name.
         args: Tool arguments.
     """
-    args_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+    # Filter out injected runtime argument
+    filtered_args = {k: v for k, v in args.items() if k != "runtime"}
+    args_str = ", ".join(f"{k}={v!r}" for k, v in filtered_args.items())
     console.print(f"[dim]  > Calling [cyan]{name}[/cyan]({args_str})[/dim]")
 
 
