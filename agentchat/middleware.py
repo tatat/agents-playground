@@ -1,15 +1,18 @@
 """Custom middleware for agent functionality."""
 
 import json
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import rich
-from langchain.agents.middleware.types import AgentMiddleware
+from langchain.agents.middleware.types import AgentMiddleware, AgentState
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
-from langgraph.types import interrupt
+from langgraph.prebuilt.tool_node import ToolCallRequest
+from langgraph.types import Command, interrupt
 
 
-class DynamicToolMiddleware(AgentMiddleware[Any, Any]):
+class DynamicToolMiddleware(AgentMiddleware[AgentState[Any], Any]):
     """Middleware that dynamically adds tools based on tool_search results.
 
     Uses interrupt to pause after tool discovery, allowing agent to be
@@ -27,9 +30,9 @@ class DynamicToolMiddleware(AgentMiddleware[Any, Any]):
         self.tool_registry = tool_registry
         self.discovered_tools: set[str] = set()
 
-    def _process_tool_search_result(self, request: Any, result: Any) -> None:
+    def _process_tool_search_result(self, request: ToolCallRequest, result: Any) -> None:
         """Process tool_search results to track discovered tools."""
-        tool_name = request.tool.name if hasattr(request.tool, "name") else ""
+        tool_name = request.tool.name if request.tool else ""
         if tool_name != "tool_search":
             return
 
@@ -70,23 +73,31 @@ class DynamicToolMiddleware(AgentMiddleware[Any, Any]):
                 }
             )
 
-    def wrap_tool_call(self, request: Any, handler: Any) -> Any:
+    def wrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
+    ) -> ToolMessage | Command[Any]:
         """Intercept tool_search results to track discovered tools (sync)."""
         result = handler(request)
         self._process_tool_search_result(request, result)
         return result
 
-    async def awrap_tool_call(self, request: Any, handler: Any) -> Any:
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+    ) -> ToolMessage | Command[Any]:
         """Intercept tool_search results to track discovered tools (async)."""
         result = await handler(request)
         self._process_tool_search_result(request, result)
         return result
 
 
-class TokenUsageLoggingMiddleware(AgentMiddleware[Any, Any]):
+class TokenUsageLoggingMiddleware(AgentMiddleware[AgentState[Any], Any]):
     """Middleware that logs token usage for each model call."""
 
-    def after_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:  # noqa: ARG002
+    def after_model(self, state: AgentState[Any], runtime: Any) -> dict[str, Any] | None:  # noqa: ARG002
         """Log token usage after model call."""
         # Get the last message from state which contains usage metadata
         messages = state.get("messages", [])
