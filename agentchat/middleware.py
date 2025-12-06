@@ -33,13 +33,27 @@ class DynamicToolMiddleware(AgentMiddleware[Any, Any]):
         if tool_name != "tool_search":
             return
 
-        # Extract tool names from the result (JSON list with "name" field)
-        content = str(result.content) if hasattr(result, "content") else str(result)
-        try:
-            tools = json.loads(content)
-            tool_names = {t.get("name") for t in tools if isinstance(t, dict) and t.get("name")}
-        except json.JSONDecodeError:
-            tool_names = set()
+        # Extract tool names from the result
+        # result.content may be a dict (native) or JSON string
+        # Format: {"tools": [...]} or {"error": "..."}
+        content = result.content if hasattr(result, "content") else result
+
+        tool_names: set[str] = set()
+
+        # Parse JSON string if needed
+        if isinstance(content, str):
+            try:
+                content = json.loads(content)
+            except json.JSONDecodeError:
+                pass
+
+        # Extract tools from {"tools": [...]} format
+        if isinstance(content, dict):
+            tools_list = content.get("tools", [])
+            if isinstance(tools_list, list):
+                for t in tools_list:
+                    if isinstance(t, dict) and isinstance(name := t.get("name"), str):
+                        tool_names.add(name)
 
         new_discoveries = False
         for name in tool_names:

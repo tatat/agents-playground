@@ -135,10 +135,12 @@ sys.stdout.flush()
             output_lines: list[str] = []
             user_output_started = False
 
+            timed_out = False
             while True:
                 try:
                     line_bytes = await asyncio.wait_for(proc_stdout.readline(), timeout=30)
                 except TimeoutError:
+                    timed_out = True
                     break
 
                 if not line_bytes:
@@ -180,6 +182,12 @@ sys.stdout.flush()
                 elif user_output_started:
                     output_lines.append(line)
 
+            # Kill process if timed out
+            if timed_out:
+                proc.kill()
+                await proc.wait()
+                return "Error: Execution timed out (30s limit)"
+
             stderr_bytes = await proc_stderr.read()
             stderr = stderr_bytes.decode()
             await proc.wait()
@@ -194,6 +202,7 @@ sys.stdout.flush()
 
         except TimeoutError:
             proc.kill()
+            await proc.wait()
             return "Error: Execution timed out (30s limit)"
         except Exception as e:
             return f"Error: {type(e).__name__}: {e}"
