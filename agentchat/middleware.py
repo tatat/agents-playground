@@ -1,5 +1,6 @@
 """Dynamic tool middleware for tool discovery pattern."""
 
+import json
 from typing import Any
 
 import rich
@@ -32,11 +33,17 @@ class DynamicToolMiddleware(AgentMiddleware[Any, Any]):
         if tool_name != "tool_search":
             return
 
-        # Extract tool names from the result
+        # Extract tool names from the result (JSON list with "name" field)
         content = str(result.content) if hasattr(result, "content") else str(result)
+        try:
+            tools = json.loads(content)
+            tool_names = {t.get("name") for t in tools if isinstance(t, dict) and t.get("name")}
+        except json.JSONDecodeError:
+            tool_names = set()
+
         new_discoveries = False
-        for name in self.tool_registry:
-            if name in content and name not in self.discovered_tools:
+        for name in tool_names:
+            if name in self.tool_registry and name not in self.discovered_tools:
                 self.discovered_tools.add(name)
                 new_discoveries = True
         rich.print(f"[dim]Discovered tools: {self.discovered_tools}[/dim]")
