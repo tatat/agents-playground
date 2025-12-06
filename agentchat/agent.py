@@ -1,6 +1,7 @@
 """Agent creation and configuration."""
 
 from contextlib import AsyncExitStack
+from pathlib import Path
 from typing import Any
 
 from langchain.agents import create_agent
@@ -20,6 +21,9 @@ from .tools import (
     tool_search,
 )
 from .tools.sandbox import is_srt_available
+
+# SRT sandbox settings (project root)
+SRT_SETTINGS_PATH = Path(__file__).parent.parent / "srt-settings.json"
 
 PROGRAMMATIC_SYSTEM_PROMPT = """You are a helpful assistant with programmatic tool calling capabilities.
 
@@ -82,7 +86,7 @@ async def create_programmatic_agent(
         exit_stack, _ = await load_mcp_tools_to_registry()
 
     # Create execute_code tool with access to registry
-    execute_code = create_execute_code_tool(TOOL_REGISTRY)
+    execute_code = create_execute_code_tool(TOOL_REGISTRY, srt_settings=SRT_SETTINGS_PATH)
     tools: list[BaseTool] = [tool_search, execute_code]
 
     # Create the model

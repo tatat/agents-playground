@@ -31,11 +31,17 @@ def is_srt_available() -> bool:
     return _get_srt_cmd() is not None
 
 
-def create_execute_code_tool(registry: dict[str, BaseTool]) -> BaseTool:
+def create_execute_code_tool(
+    registry: dict[str, BaseTool],
+    *,
+    srt_settings: str | Path | None = None,
+) -> BaseTool:
     """Create a sandboxed code execution tool.
 
     Args:
         registry: Tool registry for resolving tool calls.
+        srt_settings: Optional path to srt settings file for network/filesystem
+            permissions. See https://github.com/anthropic-experimental/sandbox-runtime
 
     Returns:
         A tool that executes Python code in a sandbox with tool_call support.
@@ -50,6 +56,10 @@ def create_execute_code_tool(registry: dict[str, BaseTool]) -> BaseTool:
             "Install globally with 'npm install -g @anthropic-ai/sandbox-runtime' "
             "or ensure npx is available."
         )
+
+    # Add settings flag if provided
+    if srt_settings is not None:
+        srt_cmd = [*srt_cmd, "--settings", str(srt_settings)]
 
     @tool
     async def execute_code(code: str) -> str:
