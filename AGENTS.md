@@ -7,6 +7,7 @@ This file provides guidance to AI coding agents when working with code in this r
 ```bash
 make check-all   # Run before commit (lint + typecheck including notebooks)
 make format      # Auto-format with ruff
+make nb2md NB=notebooks/example.ipynb  # Convert notebook to LLM-friendly markdown
 ```
 
 Note: If `make` doesn't work, try `command make` or use full path.

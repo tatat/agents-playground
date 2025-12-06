@@ -1,0 +1,8 @@
+{% extends 'markdown/index.md.j2' %}
+
+{% block data_text scoped %}
+{{ output.data['text/plain'] | strip_ansi | indent }}
+{% endblock data_text %}
+
+{% block data_html scoped %}
+{% endblock data_html %}

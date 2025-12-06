@@ -1,4 +1,4 @@
-.PHONY: lint format check typecheck typecheck-nb check-all
+.PHONY: lint format check typecheck typecheck-nb check-all nb2md
 
 lint:
 	uv run ruff check .
@@ -15,3 +15,8 @@ typecheck-nb:
 check: lint typecheck
 
 check-all: check typecheck-nb
+
+# Convert notebook to LLM-friendly markdown (no HTML, no ANSI)
+# Usage: make nb2md NB=notebooks/example.ipynb
+nb2md:
+	@uv run jupyter nbconvert --to markdown --stdout --config nbconvert_templates/config.py --template plaintext $(NB)
