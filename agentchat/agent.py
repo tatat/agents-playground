@@ -170,9 +170,7 @@ class DirectModeAgentFactory:
         if self.hitl_tools and discovered_tools:
             hitl_targets = self.hitl_tools & discovered_tools
             if hitl_targets:
-                middlewares.append(
-                    HumanInTheLoopMiddleware(interrupt_on={name: True for name in hitl_targets})
-                )
+                middlewares.append(HumanInTheLoopMiddleware(interrupt_on={name: True for name in hitl_targets}))
 
         return create_agent(
             model=self.model,
