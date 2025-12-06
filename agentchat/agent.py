@@ -6,11 +6,11 @@ from typing import Any
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
+from .llm import create_chat_model
 from .middleware import DynamicToolMiddleware
 from .tools import (
     TOOL_REGISTRY,
@@ -52,7 +52,7 @@ Use tool_search to find available tools, then use them to help the user."""
 
 
 async def create_programmatic_agent(
-    model_name: str = "claude-sonnet-4-5-20250929",
+    model_name: str | None = None,
     system_prompt: str | None = None,
     use_mcp: bool = True,
 ) -> tuple[CompiledStateGraph[Any], AsyncExitStack]:
@@ -90,7 +90,7 @@ async def create_programmatic_agent(
     tools: list[BaseTool] = [tool_search, execute_code]
 
     # Create the model
-    model = ChatAnthropic(model=model_name)
+    model = create_chat_model(model_name)
 
     # Create checkpointer for conversation persistence
     checkpointer = InMemorySaver()
@@ -111,18 +111,18 @@ class DirectModeAgentFactory:
 
     def __init__(
         self,
-        model_name: str = "claude-sonnet-4-5-20250929",
+        model_name: str | None = None,
         system_prompt: str | None = None,
         hitl_tools: set[str] | None = None,
     ):
         """Initialize the factory.
 
         Args:
-            model_name: The Claude model to use.
+            model_name: The model to use (defaults to provider default).
             system_prompt: Custom system prompt (optional).
             hitl_tools: Tool names that require human approval before execution.
         """
-        self.model = ChatAnthropic(model=model_name)
+        self.model = create_chat_model(model_name)
         self.system_prompt = system_prompt or DIRECT_SYSTEM_PROMPT
         self.checkpointer = InMemorySaver()
         self.middleware = DynamicToolMiddleware(TOOL_REGISTRY)

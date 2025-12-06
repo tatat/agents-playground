@@ -15,6 +15,37 @@ This is an experimental implementation for learning and prototyping.
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+## LLM Provider
+
+Supports Anthropic direct API (default) and AWS Bedrock.
+
+### Anthropic (default)
+
+```bash
+# .env
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### AWS Bedrock
+
+```bash
+# .env
+LLM_PROVIDER=bedrock
+AWS_REGION=us-east-1
+
+# AWS credentials via standard chain (env vars, profile, IAM role)
+```
+
+### Model Override
+
+```bash
+# Anthropic
+MODEL_ID=claude-sonnet-4-5-20250929
+
+# Bedrock (Cross-Region Inference)
+MODEL_ID=us.anthropic.claude-sonnet-4-5-20250929-v1:0
+```
+
 ## Modes
 
 ### Direct Mode
