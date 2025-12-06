@@ -51,13 +51,13 @@ while IFS= read -r -d '' notebook; do
     rel_dir=$(dirname "$rel_path")
     basename=$(basename "$notebook" .ipynb)
 
-    # Determine output path (preserve directory structure)
+    # Determine output path (preserve directory structure under notebooks/)
     if [[ "$rel_dir" == "." ]]; then
-        output_subdir="$OUTPUT_DIR"
-        page_path="$basename"
+        output_subdir="$OUTPUT_DIR/notebooks"
+        page_path="notebooks/$basename"
     else
-        output_subdir="$OUTPUT_DIR/$rel_dir"
-        page_path="$rel_dir/$basename"
+        output_subdir="$OUTPUT_DIR/notebooks/$rel_dir"
+        page_path="notebooks/$rel_dir/$basename"
     fi
 
     mkdir -p "$output_subdir"
@@ -75,7 +75,7 @@ while IFS= read -r -d '' notebook; do
 done < <(find "$NOTEBOOKS_DIR" -name "*.ipynb" -type f -print0 | sort -z)
 
 echo ""
-echo "Generating llms.txt..."
+echo "Generating llms.txt and index.html..."
 
 # Generate llms.txt
 cat > "$OUTPUT_DIR/llms.txt" << EOF
@@ -87,13 +87,52 @@ LangChain / LangGraph agent development notebooks.
 
 EOF
 
+# Generate index.html
+cat > "$OUTPUT_DIR/index.html" << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>agents-playground</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.6;
+    }
+    h1 { border-bottom: 1px solid #ddd; padding-bottom: 0.5rem; }
+    ul { list-style: none; padding: 0; }
+    li { margin: 0.5rem 0; }
+    a { color: #0066cc; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .meta { color: #666; font-size: 0.9rem; margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>agents-playground</h1>
+  <p>LangChain / LangGraph agent development notebooks.</p>
+  <h2>Notebooks</h2>
+  <ul>
+EOF
+
 for page in "${PAGES[@]}"; do
     # Create a title from the filename (replace hyphens with spaces, capitalize)
     # Use only the basename for title
     name=$(basename "$page")
     title=$(echo "$name" | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1')
     echo "- [$title](${page}.md)" >> "$OUTPUT_DIR/llms.txt"
+    echo "    <li><a href=\"${page}.md\">$title</a></li>" >> "$OUTPUT_DIR/index.html"
 done
 
+cat >> "$OUTPUT_DIR/index.html" << 'EOF'
+  </ul>
+  <p class="meta"><a href="llms.txt">llms.txt</a></p>
+</body>
+</html>
+EOF
+
 echo ""
-echo "Done! Generated ${#PAGES[@]} pages and llms.txt"
+echo "Done! Generated ${#PAGES[@]} pages, llms.txt, and index.html"
