@@ -92,7 +92,7 @@ for page in "${PAGES[@]}"; do
     # Use only the basename for title
     name=$(basename "$page")
     title=$(echo "$name" | sed 's/-/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1')
-    echo "- [$title](/${page}.md)" >> "$OUTPUT_DIR/llms.txt"
+    echo "- [$title](${page}.md)" >> "$OUTPUT_DIR/llms.txt"
 done
 
 echo ""
