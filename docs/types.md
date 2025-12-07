@@ -41,3 +41,29 @@ config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 ```
 
 No `cast()` needed.
+
+## MCP Adapters Types
+
+`langchain-mcp-adapters` has type annotations but no `py.typed` marker. We enable type checking via `pyproject.toml`:
+
+```toml
+[[tool.mypy.overrides]]
+module = "langchain_mcp_adapters.*"
+follow_untyped_imports = true
+```
+
+Use `Connection` and `StdioConnection` for MCP client configuration:
+
+```python
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.sessions import Connection, StdioConnection
+
+config: dict[str, Connection] = {}
+config["math"] = StdioConnection(
+    transport="stdio",
+    command="python",
+    args=["mcp_servers/math_server.py"],
+)
+
+client = MultiServerMCPClient(config)
+```

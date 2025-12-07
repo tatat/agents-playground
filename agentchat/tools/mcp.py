@@ -2,11 +2,11 @@
 
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import Any
 
 from langchain_core.tools import BaseTool
-from langchain_mcp_adapters.client import MultiServerMCPClient  # type: ignore[import-untyped]
-from langchain_mcp_adapters.tools import load_mcp_tools  # type: ignore[import-untyped]
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.sessions import Connection, StdioConnection
+from langchain_mcp_adapters.tools import load_mcp_tools
 
 from .registry import register_tool
 
@@ -56,13 +56,13 @@ async def load_mcp_tools_to_registry(
         return AsyncExitStack(), []
 
     # Build MCP client config
-    config: dict[str, dict[str, Any]] = {}
+    config: dict[str, Connection] = {}
     for name, path in servers.items():
-        config[name] = {
-            "command": "python",
-            "args": [str(path.resolve())],
-            "transport": "stdio",
-        }
+        config[name] = StdioConnection(
+            transport="stdio",
+            command="python",
+            args=[str(path.resolve())],
+        )
 
     client = MultiServerMCPClient(config)
     stack = AsyncExitStack()

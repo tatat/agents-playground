@@ -65,6 +65,10 @@ exclude = ["tmp", "nbconvert_templates"]
 plugins = ["pydantic.mypy"]
 disable_error_code = ["top-level-await"]
 
+[[tool.mypy.overrides]]
+module = "langchain_mcp_adapters.*"
+follow_untyped_imports = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true
