@@ -82,7 +82,7 @@ This displays a list of saved threads with message count and preview, allowing y
 agentchat/
 ├── __init__.py          # Entry points (main_direct, main_programmatic)
 ├── agent.py             # Agent factory (DirectModeAgentFactory, create_programmatic_agent)
-├── middleware.py        # DynamicToolMiddleware for tool discovery
+├── middleware.py        # ToolSearchFilterMiddleware for tool discovery
 ├── ui.py                # Rich console output
 ├── chat/
 │   ├── direct.py        # Direct mode chat loop, HITL handling

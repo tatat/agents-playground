@@ -12,7 +12,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph.state import CompiledStateGraph
 
 from .llm import create_chat_model
-from .middleware import DynamicToolMiddleware, TokenUsageLoggingMiddleware
+from .middleware import TokenUsageLoggingMiddleware, ToolSearchFilterMiddleware
 from .tools import (
     TOOL_REGISTRY,
     create_execute_code_tool,
@@ -118,7 +118,10 @@ async def create_programmatic_agent(
 
 
 class DirectModeAgentFactory:
-    """Factory for creating direct mode agents with dynamic tool discovery."""
+    """Factory for creating direct mode agents with dynamic tool filtering.
+
+    Uses filter pattern: all tools registered upfront, middleware filters visibility.
+    """
 
     def __init__(
         self,
@@ -136,10 +139,11 @@ class DirectModeAgentFactory:
         self.model = create_chat_model(model_name)
         self.system_prompt = system_prompt or DIRECT_SYSTEM_PROMPT
         self.checkpointer: AsyncSqliteSaver | None = None
-        self.middleware = DynamicToolMiddleware(TOOL_REGISTRY)
+        self.middleware = ToolSearchFilterMiddleware(TOOL_REGISTRY)
         self.hitl_tools = hitl_tools or set()
         self.mcp_tools: list[BaseTool] = []
         self._exit_stack: AsyncExitStack | None = None
+        self._agent: CompiledStateGraph[Any] | None = None
 
     async def initialize(self) -> AsyncExitStack:
         """Initialize the factory by registering tools and checkpointer.
@@ -165,26 +169,23 @@ class DirectModeAgentFactory:
         self._exit_stack = exit_stack
         return exit_stack
 
-    def create_agent(self, discovered_tools: set[str] | None = None) -> CompiledStateGraph[Any]:
-        """Create an agent with tool_search + discovered tools.
+    def create_agent(self) -> CompiledStateGraph[Any]:
+        """Create an agent with all tools registered.
 
-        Args:
-            discovered_tools: Set of tool names to include (from registry).
+        Middleware filters which tools are visible to the LLM based on
+        tool_search discoveries.
 
         Returns:
             Compiled agent graph.
         """
+        # Return cached agent if available
+        if self._agent is not None:
+            return self._agent
+
+        # Register ALL tools - middleware will filter visibility
         tools: list[BaseTool] = [tool_search]
-
-        if discovered_tools:
-            for name in discovered_tools:
-                if name in TOOL_REGISTRY:
-                    tools.append(TOOL_REGISTRY[name])
-
-        # Add MCP tools if they were discovered
-        for mcp_tool in self.mcp_tools:
-            if discovered_tools and mcp_tool.name in discovered_tools:
-                tools.append(mcp_tool)
+        tools.extend(TOOL_REGISTRY.values())
+        tools.extend(self.mcp_tools)
 
         # Build middleware list
         middlewares: list[AgentMiddleware[Any, Any]] = [
@@ -197,16 +198,17 @@ class DirectModeAgentFactory:
             ),
         ]
 
-        # Add HITL middleware for discovered tools that require approval
-        if self.hitl_tools and discovered_tools:
-            hitl_targets = self.hitl_tools & discovered_tools
-            if hitl_targets:
-                middlewares.append(HumanInTheLoopMiddleware(interrupt_on={name: True for name in hitl_targets}))
+        # Add HITL middleware for tools that require approval
+        # Note: HITL applies even before discovery since all tools are registered
+        if self.hitl_tools:
+            middlewares.append(HumanInTheLoopMiddleware(interrupt_on={name: True for name in self.hitl_tools}))
 
-        return create_agent(
+        self._agent = create_agent(
             model=self.model,
             tools=tools,
             system_prompt=self.system_prompt,
             middleware=middlewares,
             checkpointer=self.checkpointer,
         )
+
+        return self._agent

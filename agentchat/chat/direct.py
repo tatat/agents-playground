@@ -1,4 +1,4 @@
-"""Direct mode chat loop with dynamic tool discovery."""
+"""Direct mode chat loop with dynamic tool filtering."""
 
 from typing import Any, NotRequired, TypedDict
 from uuid import uuid4
@@ -10,7 +10,6 @@ from langgraph.types import Command
 from prompt_toolkit import PromptSession
 
 from ..agent import DirectModeAgentFactory
-from ..middleware import DynamicToolMiddleware
 from ..resume import (
     _extract_tools_from_messages,
     aget_messages,
@@ -104,26 +103,27 @@ async def prompt_hitl_decisions(
     return decisions
 
 
-async def stream_with_tool_discovery(
-    factory: DirectModeAgentFactory,
+async def stream_with_hitl(
     agent: CompiledStateGraph[Any],
     input_or_command: dict[str, Any] | Command[Any],
     config: RunnableConfig,
     session: PromptSession[str],
     approved_calls: set[tuple[str, ...]],
 ) -> bool:
-    """Stream agent and handle tool discovery/HITL interrupts recursively.
+    """Stream agent and handle HITL interrupts.
+
+    Tool discovery is handled automatically by middleware filtering.
+    Only HITL interrupts require special handling.
 
     Args:
-        factory: Agent factory for creating new agents.
-        agent: Current agent instance.
+        agent: Agent instance.
         input_or_command: Input message or resume command.
         config: Runnable config with thread_id.
         session: Prompt session for user input.
         approved_calls: Set of previously approved call keys for auto-approve.
 
     Returns:
-        True if interrupted, False otherwise.
+        True if interrupted by user, False otherwise.
     """
     interrupted = await process_stream_events(agent.astream_events(input_or_command, config=config, version="v2"))
 
@@ -137,32 +137,21 @@ async def stream_with_tool_discovery(
 
     for task in state.tasks:
         for intr in task.interrupts:
-            # Handle tool discovery interrupts
-            if intr.value.get("type") == DynamicToolMiddleware.INTERRUPT_TYPE:
-                discovered = intr.value.get("discovered_tools", [])
-                print_info(f"Discovered tools: {discovered}")
-
-                # Recreate agent with discovered tools and resume
-                new_agent = factory.create_agent(set(discovered))
-                return await stream_with_tool_discovery(
-                    factory, new_agent, Command(resume={}), config, session, approved_calls
-                )
-
             # Handle HITL interrupts
             if "action_requests" in intr.value:
                 action_requests = intr.value["action_requests"]
                 decisions = await prompt_hitl_decisions(action_requests, session, approved_calls)
 
                 print_streaming_start()
-                return await stream_with_tool_discovery(
-                    factory, agent, Command(resume={"decisions": decisions}), config, session, approved_calls
+                return await stream_with_hitl(
+                    agent, Command(resume={"decisions": decisions}), config, session, approved_calls
                 )
 
     return False
 
 
 async def direct_chat_loop(resume: bool = False) -> None:
-    """Run the direct mode chat loop with dynamic tool discovery.
+    """Run the direct mode chat loop with dynamic tool filtering.
 
     Args:
         resume: Whether to show thread selection for resuming.
@@ -180,22 +169,22 @@ async def direct_chat_loop(resume: bool = False) -> None:
         thread_id = await aselect_thread_interactive(factory.checkpointer)
 
     # Restore discovered tools and messages if resuming
-    restored_tools: set[str] = set()
     restored_messages: list[Any] = []
     if thread_id is not None and factory.checkpointer is not None:
         restored_messages = await aget_messages(thread_id, factory.checkpointer)
         restored_tools = _extract_tools_from_messages(restored_messages)
         factory.middleware.discovered_tools = restored_tools
 
-    # Create agent with restored tools (or just tool_search for new sessions)
-    agent = factory.create_agent(restored_tools or None)
+    # Create agent (all tools registered, middleware filters visibility)
+    agent = factory.create_agent()
 
     if thread_id is None:
         thread_id = str(uuid4())
         print_info(f"New session: {thread_id[:8]}...")
     else:
-        if restored_tools:
-            print_info(f"Resuming session: {thread_id[:8]}... (tools: {', '.join(restored_tools)})")
+        discovered = factory.middleware.discovered_tools
+        if discovered:
+            print_info(f"Resuming session: {thread_id[:8]}... (tools: {', '.join(discovered)})")
         else:
             print_info(f"Resuming session: {thread_id[:8]}...")
         # Show recent conversation
@@ -224,8 +213,7 @@ async def direct_chat_loop(resume: bool = False) -> None:
                 console.print()
                 print_streaming_start()
 
-                interrupted = await stream_with_tool_discovery(
-                    factory,
+                interrupted = await stream_with_hitl(
                     agent,
                     {"messages": [{"role": "user", "content": user_input}]},
                     config,
@@ -235,9 +223,6 @@ async def direct_chat_loop(resume: bool = False) -> None:
 
                 print_streaming_end()
                 console.print()
-
-                # Update agent with any newly discovered tools
-                agent = factory.create_agent(factory.middleware.discovered_tools)
 
                 if interrupted:
                     console.print("[dim]Interrupted[/dim]")

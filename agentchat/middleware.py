@@ -1,25 +1,29 @@
 """Custom middleware for agent functionality."""
 
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 import rich
-from langchain.agents.middleware.types import AgentMiddleware, AgentState
+from langchain.agents.middleware.types import (
+    AgentMiddleware,
+    AgentState,
+    ModelRequest,
+    ModelResponse,
+)
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt.tool_node import ToolCallRequest
-from langgraph.types import Command, interrupt
+from langgraph.types import Command
 
 
-class DynamicToolMiddleware(AgentMiddleware[AgentState[Any], Any]):
-    """Middleware that dynamically adds tools based on tool_search results.
+class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
+    """Middleware that filters tools based on tool_search results.
 
-    Uses interrupt to pause after tool discovery, allowing agent to be
-    recreated with the new tools.
+    - Intercepts tool_search results to track discovered tools
+    - Filters model requests to only show tool_search + discovered tools
+    - Saves tokens by hiding undiscovered tools from LLM
     """
-
-    INTERRUPT_TYPE = "tool_discovery"
 
     def __init__(self, tool_registry: dict[str, BaseTool]):
         """Initialize middleware.
@@ -29,6 +33,50 @@ class DynamicToolMiddleware(AgentMiddleware[AgentState[Any], Any]):
         """
         self.tool_registry = tool_registry
         self.discovered_tools: set[str] = set()
+
+    def _get_tool_name(self, t: BaseTool | dict[str, Any]) -> str:
+        """Get tool name from BaseTool or dict."""
+        if isinstance(t, BaseTool):
+            return t.name
+        return str(t.get("name", "?"))
+
+    def _get_tool_names(self, tools: Sequence[BaseTool | dict[str, Any]]) -> list[str]:
+        """Extract tool names from a list of tools."""
+        return [self._get_tool_name(t) for t in tools]
+
+    def _filter_tools(
+        self, tools: Sequence[BaseTool | dict[str, Any]]
+    ) -> list[BaseTool | dict[str, Any]]:
+        """Filter tools to show only tool_search + discovered tools."""
+        filtered: list[BaseTool | dict[str, Any]] = []
+        for t in tools:
+            name = self._get_tool_name(t)
+            # Always include tool_search, plus discovered tools
+            if name == "tool_search" or name in self.discovered_tools:
+                filtered.append(t)
+        return filtered
+
+    def wrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], ModelResponse],
+    ) -> ModelResponse:
+        """Filter tools to only show tool_search + discovered tools (sync)."""
+        filtered = self._filter_tools(request.tools)
+        rich.print(f"[dim]Visible tools: {self._get_tool_names(filtered)}[/dim]")
+        request = request.override(tools=filtered)
+        return handler(request)
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        """Filter tools to only show tool_search + discovered tools (async)."""
+        filtered = self._filter_tools(request.tools)
+        rich.print(f"[dim]Visible tools: {self._get_tool_names(filtered)}[/dim]")
+        request = request.override(tools=filtered)
+        return await handler(request)
 
     def _process_tool_search_result(self, request: ToolCallRequest, result: Any) -> None:
         """Process tool_search results to track discovered tools."""
@@ -58,20 +106,11 @@ class DynamicToolMiddleware(AgentMiddleware[AgentState[Any], Any]):
                     if isinstance(t, dict) and isinstance(name := t.get("name"), str):
                         tool_names.add(name)
 
-        new_discoveries = False
+        # Track discovered tools (no interrupt)
         for name in tool_names:
             if name in self.tool_registry and name not in self.discovered_tools:
                 self.discovered_tools.add(name)
-                new_discoveries = True
-
-        # Interrupt to allow tools to be added
-        if new_discoveries:
-            interrupt(
-                {
-                    "type": self.INTERRUPT_TYPE,
-                    "discovered_tools": list(self.discovered_tools),
-                }
-            )
+                rich.print(f"[yellow]Discovered: {name}[/yellow]")
 
     def wrap_tool_call(
         self,
