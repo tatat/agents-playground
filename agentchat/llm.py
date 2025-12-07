@@ -1,7 +1,7 @@
 """LLM provider configuration and factory."""
 
 import os
-from typing import Literal
+from typing import Literal, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -18,7 +18,7 @@ def get_provider() -> LLMProvider:
     provider = os.environ.get("LLM_PROVIDER", "anthropic").lower()
     if provider not in ("anthropic", "bedrock"):
         raise ValueError(f"Invalid LLM_PROVIDER: {provider}. Must be 'anthropic' or 'bedrock'.")
-    return provider  # type: ignore[return-value]
+    return cast(LLMProvider, provider)
 
 
 def get_default_model(provider: LLMProvider | None = None) -> str:
