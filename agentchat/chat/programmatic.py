@@ -1,7 +1,6 @@
 """Programmatic mode chat loop with sandbox execution."""
 
 import sys
-from typing import cast
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -51,7 +50,7 @@ async def programmatic_chat_loop(resume: bool = False) -> None:
         print_recent_messages(messages, console)
     console.print()
 
-    config = cast(RunnableConfig, {"configurable": {"thread_id": thread_id}})
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     session: PromptSession[str] = PromptSession(key_bindings=create_key_bindings())
 
     async with exit_stack:

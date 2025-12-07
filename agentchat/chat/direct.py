@@ -1,6 +1,6 @@
 """Direct mode chat loop with dynamic tool discovery."""
 
-from typing import Any, NotRequired, TypedDict, cast
+from typing import Any, NotRequired, TypedDict
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -202,7 +202,7 @@ async def direct_chat_loop(resume: bool = False) -> None:
         print_recent_messages(restored_messages, console)
     console.print()
 
-    config = cast(RunnableConfig, {"configurable": {"thread_id": thread_id}})
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     session: PromptSession[str] = PromptSession(key_bindings=create_key_bindings())
 
     # Track approved calls for auto-approve (in-memory only)
