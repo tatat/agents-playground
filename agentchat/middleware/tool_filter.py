@@ -18,15 +18,15 @@ from langgraph.types import Command
 
 
 class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
-    """Middleware that filters tools based on tool_search results.
+    """Middleware that filters tools based on tool_search/tool_search_regex results.
 
-    - Intercepts tool_search results to track discovered tools
-    - Filters model requests to only show tool_search + discovered tools
+    - Intercepts tool_search/tool_search_regex results to track discovered tools
+    - Filters model requests to only show discovery tools + discovered tools
     - Saves tokens by hiding undiscovered tools from LLM
     """
 
     # Tools that are always visible (meta-tools for discovery)
-    ALWAYS_VISIBLE = {"tool_search", "search_skills", "get_skill"}
+    ALWAYS_VISIBLE = {"tool_search", "tool_search_regex", "search_skills", "get_skill"}
 
     def __init__(self, tool_registry: dict[str, BaseTool]):
         """Initialize middleware.
@@ -62,7 +62,7 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelResponse:
-        """Filter tools to only show tool_search + discovered tools (sync)."""
+        """Filter tools to only show discovery tools + discovered tools (sync)."""
         filtered = self._filter_tools(request.tools)
         rich.print(f"[dim]Visible tools: {self._get_tool_names(filtered)}[/dim]")
         request = request.override(tools=filtered)
@@ -73,16 +73,16 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
-        """Filter tools to only show tool_search + discovered tools (async)."""
+        """Filter tools to only show discovery tools + discovered tools (async)."""
         filtered = self._filter_tools(request.tools)
         rich.print(f"[dim]Visible tools: {self._get_tool_names(filtered)}[/dim]")
         request = request.override(tools=filtered)
         return await handler(request)
 
     def _process_tool_search_result(self, request: ToolCallRequest, result: Any) -> None:
-        """Process tool_search results to track discovered tools."""
+        """Process tool_search/tool_search_regex results to track discovered tools."""
         tool_name = request.tool.name if request.tool else ""
-        if tool_name != "tool_search":
+        if tool_name not in ("tool_search", "tool_search_regex"):
             return
 
         # Extract tool names from the result
@@ -118,7 +118,7 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
     ) -> ToolMessage | Command[Any]:
-        """Intercept tool_search results to track discovered tools (sync)."""
+        """Intercept tool_search/tool_search_regex results to track discovered tools (sync)."""
         result = handler(request)
         self._process_tool_search_result(request, result)
         return result
@@ -128,7 +128,7 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
     ) -> ToolMessage | Command[Any]:
-        """Intercept tool_search results to track discovered tools (async)."""
+        """Intercept tool_search/tool_search_regex results to track discovered tools (async)."""
         result = await handler(request)
         self._process_tool_search_result(request, result)
         return result

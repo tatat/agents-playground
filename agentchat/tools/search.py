@@ -11,15 +11,13 @@ PAGE_SIZE = 5
 
 
 @tool
-def tool_search(pattern: str, page: int = 1) -> dict[str, Any]:
-    """Search for available tools by regex pattern.
+def tool_search_regex(pattern: str, page: int = 1) -> dict[str, Any]:
+    """Search for tools by regex pattern.
 
-    Use this to discover tools before calling them with execute_code.
-    Use specific patterns to minimize results and save tokens.
+    Use for precise pattern matching like 'weather_.*' or 'send|receive'.
 
     Args:
         pattern: Regex pattern to match against tool names and descriptions.
-            Use specific patterns like "weather" or "email" instead of broad ones like ".*".
         page: Page number for pagination (1-indexed, default 1).
 
     Returns:
@@ -28,8 +26,8 @@ def tool_search(pattern: str, page: int = 1) -> dict[str, Any]:
         {"error": "..."} if the regex pattern is invalid.
 
     Example:
-        tool_search("weather") -> {"tools": [{"name": "get_weather", ...}], ...}
-        tool_search("email|calendar") -> tools matching email or calendar
+        tool_search_regex("weather_.*") -> tools starting with weather_
+        tool_search_regex("email|calendar") -> tools matching email or calendar
     """
     matches: list[dict[str, Any]] = []
 

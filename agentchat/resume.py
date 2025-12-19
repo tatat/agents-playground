@@ -17,7 +17,7 @@ def _extract_tools_from_messages(messages: list[Any]) -> set[str]:
 
     Extracts both:
     - Tools that were actually called (from ToolMessage.name)
-    - Tools discovered via tool_search (from ToolMessage.content)
+    - Tools discovered via tool_search/tool_search_regex (from ToolMessage.content)
     """
     tools: set[str] = set()
     for msg in messages:
@@ -25,7 +25,7 @@ def _extract_tools_from_messages(messages: list[Any]) -> set[str]:
             if not hasattr(msg, "name") or not msg.name:
                 continue
 
-            if msg.name == "tool_search":
+            if msg.name in ("tool_search", "tool_search_regex"):
                 # Extract discovered tools from tool_search result
                 content = msg.content
                 if isinstance(content, str):

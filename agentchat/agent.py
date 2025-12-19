@@ -19,7 +19,7 @@ from .tools import (
     discover_mcp_servers,
     load_mcp_tools_to_registry,
     register_builtin_tools,
-    tool_search,
+    tool_search_regex,
 )
 from .tools.sandbox import is_srt_available
 
@@ -32,11 +32,11 @@ CHECKPOINT_DB_PATH = Path(__file__).parent.parent / "tmp" / "checkpoints.db"
 PROGRAMMATIC_SYSTEM_PROMPT = """You are a helpful assistant with programmatic tool calling capabilities.
 
 Available tools:
-- tool_search: Search for available tools by regex pattern. Returns tool schemas.
+- tool_search_regex: Search for tools by regex pattern. Returns tool schemas.
 - execute_code: Run Python code in a secure sandbox with tool_call(name, **kwargs).
 
 Workflow:
-1. When the user asks about capabilities, use tool_search to discover relevant tools.
+1. When the user asks about capabilities, use tool_search_regex to discover relevant tools.
 2. Use execute_code with tool_call() to invoke multiple tools efficiently in a single batch.
 3. Aggregate results and provide a clear summary to the user.
 
@@ -52,7 +52,7 @@ Always print() your results in execute_code - only printed output is returned.""
 
 DIRECT_SYSTEM_PROMPT = """You are a helpful assistant.
 
-Use tool_search to find available tools, then use them to help the user."""
+Use tool_search_regex to find available tools, then use them to help the user."""
 
 
 async def create_programmatic_agent(
@@ -89,7 +89,7 @@ async def create_programmatic_agent(
 
     # Create execute_code tool with access to registry
     execute_code = create_execute_code_tool(TOOL_REGISTRY, srt_settings=SRT_SETTINGS_PATH)
-    tools: list[BaseTool] = [tool_search, execute_code]
+    tools: list[BaseTool] = [tool_search_regex, execute_code]
 
     # Create the model
     model = create_chat_model(model_name)
@@ -183,7 +183,7 @@ class DirectModeAgentFactory:
             return self._agent
 
         # Register ALL tools - middleware will filter visibility
-        tools: list[BaseTool] = [tool_search]
+        tools: list[BaseTool] = [tool_search_regex]
         tools.extend(TOOL_REGISTRY.values())
         tools.extend(self.mcp_tools)
 
