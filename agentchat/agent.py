@@ -12,7 +12,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph.state import CompiledStateGraph
 
 from .llm import create_chat_model
-from .middleware import TokenUsageLoggingMiddleware, ToolSearchFilterMiddleware
+from .middleware import SkillSuggestMiddleware, TokenUsageLoggingMiddleware, ToolSearchFilterMiddleware
 from .tools import (
     TOOL_REGISTRY,
     create_execute_code_tool,
@@ -190,6 +190,7 @@ class DirectModeAgentFactory:
         # Build middleware list
         middlewares: list[AgentMiddleware[Any, Any]] = [
             self.middleware,
+            SkillSuggestMiddleware(top_k=3),
             TokenUsageLoggingMiddleware(),
             SummarizationMiddleware(
                 model=self.model,

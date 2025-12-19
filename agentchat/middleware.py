@@ -11,10 +11,12 @@ from langchain.agents.middleware.types import (
     ModelRequest,
     ModelResponse,
 )
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
+
+from .tools.skills import get_skill_index
 
 
 class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
@@ -132,6 +134,157 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         result = await handler(request)
         self._process_tool_search_result(request, result)
         return result
+
+
+class SkillSuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
+    """Middleware that suggests relevant skills based on user message.
+
+    Searches for skills matching the latest user message and injects
+    suggestions into the system prompt before model call.
+    """
+
+    SUGGEST_START = "[SKILL_SUGGESTIONS]"
+    SUGGEST_END = "[/SKILL_SUGGESTIONS]"
+
+    def __init__(self, top_k: int = 3):
+        """Initialize middleware.
+
+        Args:
+            top_k: Number of skills to suggest.
+        """
+        self.top_k = top_k
+        self._index_available: bool | None = None  # None = not checked yet
+
+    def _get_latest_user_message(self, messages: Sequence[Any]) -> str | None:
+        """Extract the latest user message content."""
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                content = msg.content
+                if isinstance(content, str):
+                    return content
+                # Handle list content (multimodal)
+                if isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            text = item.get("text")
+                            if isinstance(text, str):
+                                return text
+        return None
+
+    def _search_skills(self, query: str) -> list[dict[str, Any]]:
+        """Search for relevant skills. Returns empty list on failure."""
+        # Skip if we know index is unavailable
+        if self._index_available is False:
+            return []
+
+        try:
+            index = get_skill_index()
+            self._index_available = True
+            return index.search(query, self.top_k)
+        except Exception as e:  # noqa: BLE001
+            # Log once and disable future attempts
+            if self._index_available is None:
+                rich.print(f"[dim]Skill search unavailable: {e}[/dim]")
+            self._index_available = False
+            return []
+
+    def _build_suggestion_text(self, skills: list[dict[str, Any]]) -> str:
+        """Build suggestion text to inject into prompt, wrapped with markers."""
+        if not skills:
+            return ""
+
+        lines = [self.SUGGEST_START]
+        lines.append("Suggested skills based on user's request:")
+        for s in skills:
+            lines.append(f"- {s['name']}: {s['description']}")
+        lines.append("Use get_skill(name) to retrieve full skill content if needed.")
+        lines.append(self.SUGGEST_END)
+
+        return "\n".join(lines)
+
+    def _remove_old_suggestion(self, content: str) -> str:
+        """Remove existing suggestion block from content."""
+        start_idx = content.find(self.SUGGEST_START)
+        if start_idx == -1:
+            return content
+
+        end_idx = content.find(self.SUGGEST_END)
+        if end_idx == -1:
+            return content
+
+        # Remove the suggestion block including markers
+        end_idx += len(self.SUGGEST_END)
+        # Also remove surrounding whitespace
+        before = content[:start_idx].rstrip()
+        after = content[end_idx:].lstrip()
+
+        if before and after:
+            return f"{before}\n\n{after}"
+        return before or after
+
+    def _update_system_message(
+        self, system_message: SystemMessage | None, suggestion: str | None
+    ) -> SystemMessage | None:
+        """Update system message with suggestion, replacing old one if present.
+
+        If suggestion is None or empty, removes old suggestions from the message.
+        Preserves original message metadata (additional_kwargs, response_metadata, id).
+        """
+        if system_message is None:
+            if suggestion:
+                return SystemMessage(content=suggestion)
+            return None
+
+        content = system_message.content if isinstance(system_message.content, str) else str(system_message.content)
+        clean_content = self._remove_old_suggestion(content)
+
+        # Build new content: clean content + suggestion (if any)
+        if suggestion:
+            new_content = f"{clean_content}\n\n{suggestion}"
+        else:
+            new_content = clean_content
+
+        # Preserve original message fields
+        return SystemMessage(
+            content=new_content,
+            additional_kwargs=system_message.additional_kwargs,
+            response_metadata=system_message.response_metadata,
+            id=system_message.id,
+        )
+
+    def _process_request(self, request: ModelRequest) -> ModelRequest:
+        """Process request: search skills and update system message."""
+        user_msg = self._get_latest_user_message(request.messages)
+        if not user_msg:
+            return request
+
+        skills = self._search_skills(user_msg)
+        suggestion = self._build_suggestion_text(skills) if skills else None
+
+        if skills:
+            rich.print(f"[cyan]Suggested skills: {[s['name'] for s in skills]}[/cyan]")
+
+        # Update system message (removes old suggestions even if no new ones)
+        new_system = self._update_system_message(request.system_message, suggestion)
+        return request.override(system_message=new_system)
+
+    def wrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], ModelResponse],
+    ) -> ModelResponse:
+        """Search skills and inject suggestions (sync)."""
+        request = self._process_request(request)
+        return handler(request)
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        """Search skills and inject suggestions (async)."""
+        request = self._process_request(request)
+        return await handler(request)
 
 
 class TokenUsageLoggingMiddleware(AgentMiddleware[AgentState[Any], Any]):
