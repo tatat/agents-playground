@@ -1,5 +1,6 @@
 tmp
 *_nbqa_*
+:memory:
 .claude/settings.local.json
 .vscode/*
 !.vscode/settings.json

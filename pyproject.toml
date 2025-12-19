@@ -17,6 +17,8 @@ dependencies = [
     "prompt-toolkit>=3.0.0",
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",
+    "lancedb>=0.20.0",
+    "sentence-transformers>=3.0.0",
 ]
 
 [tool.uv]
@@ -35,6 +37,7 @@ dev = [
     "nbqa>=1.9.1",
     "pre-commit>=4.5.0",
     "ruff>=0.14.7",
+    "types-pyyaml>=6.0.0",
 ]
 
 [tool.ruff]
@@ -61,13 +64,17 @@ python_version = "3.13"
 strict = true
 warn_return_any = true
 warn_unused_ignores = true
-exclude = ["tmp", "nbconvert_templates"]
+exclude = ["tmp", "nbconvert_templates", "skills"]
 plugins = ["pydantic.mypy"]
 disable_error_code = ["top-level-await"]
 
 [[tool.mypy.overrides]]
 module = "langchain_mcp_adapters.*"
 follow_untyped_imports = true
+
+[[tool.mypy.overrides]]
+module = "lancedb.*"
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

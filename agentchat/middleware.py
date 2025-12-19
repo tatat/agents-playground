@@ -25,6 +25,9 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
     - Saves tokens by hiding undiscovered tools from LLM
     """
 
+    # Tools that are always visible (meta-tools for discovery)
+    ALWAYS_VISIBLE = {"tool_search", "search_skills", "get_skill"}
+
     def __init__(self, tool_registry: dict[str, BaseTool]):
         """Initialize middleware.
 
@@ -44,15 +47,13 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         """Extract tool names from a list of tools."""
         return [self._get_tool_name(t) for t in tools]
 
-    def _filter_tools(
-        self, tools: Sequence[BaseTool | dict[str, Any]]
-    ) -> list[BaseTool | dict[str, Any]]:
-        """Filter tools to show only tool_search + discovered tools."""
+    def _filter_tools(self, tools: Sequence[BaseTool | dict[str, Any]]) -> list[BaseTool | dict[str, Any]]:
+        """Filter tools to show only always-visible + discovered tools."""
         filtered: list[BaseTool | dict[str, Any]] = []
         for t in tools:
             name = self._get_tool_name(t)
-            # Always include tool_search, plus discovered tools
-            if name == "tool_search" or name in self.discovered_tools:
+            # Always include meta-tools, plus discovered tools
+            if name in self.ALWAYS_VISIBLE or name in self.discovered_tools:
                 filtered.append(t)
         return filtered
 
