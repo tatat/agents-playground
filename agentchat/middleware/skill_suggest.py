@@ -147,7 +147,8 @@ class SkillSuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
         suggestion = self._build_suggestion_text(skills) if skills else None
 
         if skills:
-            rich.print(f"[cyan]Suggested skills: {[s['name'] for s in skills]}[/cyan]")
+            items = [(s["name"], f"{s.get('score', 0):.2f}") for s in skills]
+            rich.print(f"[cyan]Suggested skills: {items}[/cyan]")
 
         # Update system message (removes old suggestions even if no new ones)
         new_system = self._update_system_message(request.system_message, suggestion)

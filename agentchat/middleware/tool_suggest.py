@@ -155,7 +155,8 @@ class ToolSuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
         suggestion = self._build_suggestion_text(tools) if tools else None
 
         if tools:
-            rich.print(f"[cyan]Suggested tools: {[t.get('name', '?') for t in tools]}[/cyan]")
+            items = [(t.get("name", "?"), f"{t.get('score', 0):.2f}") for t in tools]
+            rich.print(f"[cyan]Suggested tools: {items}[/cyan]")
 
         # Update system message (removes old suggestions even if no new ones)
         new_system = self._update_system_message(request.system_message, suggestion)
