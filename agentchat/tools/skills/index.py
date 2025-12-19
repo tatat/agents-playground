@@ -1,9 +1,15 @@
 """Skill index using LanceDB for hybrid search."""
 
+import os
 import re
 import tempfile
 from pathlib import Path
 from typing import Any
+
+# Suppress tokenizers parallelism warning (must be set before importing transformers)
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+# Suppress LanceDB "No existing dataset" warning (we always create fresh temp DB)
+os.environ.setdefault("LANCEDB_LOG", "error")
 
 import lancedb
 import yaml
