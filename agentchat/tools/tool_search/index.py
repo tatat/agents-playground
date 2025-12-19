@@ -54,9 +54,7 @@ class ToolIndex:
             )
 
         # Get embedding model (same as SkillIndex)
-        embeddings = get_registry().get("sentence-transformers").create(
-            name="paraphrase-multilingual-MiniLM-L12-v2"
-        )
+        embeddings = get_registry().get("sentence-transformers").create(name="paraphrase-multilingual-MiniLM-L12-v2")
 
         # Define schema with embedding
         class ToolDocument(LanceModel):  # type: ignore[misc]
@@ -87,12 +85,7 @@ class ToolIndex:
 
         reranker = RRFReranker()
 
-        results = (
-            self.table.search(query, query_type="hybrid")
-            .rerank(reranker=reranker)
-            .limit(top_k)
-            .to_list()
-        )
+        results = self.table.search(query, query_type="hybrid").rerank(reranker=reranker).limit(top_k).to_list()
 
         # Return full schemas
         return [

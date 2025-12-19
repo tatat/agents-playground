@@ -16,7 +16,7 @@ PAGE_SIZE = 5
 def tool_search(query: str, top_k: int = 5) -> dict[str, Any]:
     """Search for tools by natural language query.
 
-    Use for semantic discovery like 'send messages' or 'get weather forecast'.
+    Use when tool name is unknown. For known names, use tool_search_regex instead.
 
     Args:
         query: Natural language search query.
@@ -59,7 +59,7 @@ def tool_search(query: str, top_k: int = 5) -> dict[str, Any]:
 def tool_search_regex(pattern: str, page: int = 1) -> dict[str, Any]:
     """Search for tools by regex pattern.
 
-    Use for precise pattern matching like 'weather_.*' or 'send|receive'.
+    Use for precise pattern matching. Prefer this when tool name is known.
 
     Args:
         pattern: Regex pattern to match against tool names and descriptions.
@@ -71,6 +71,7 @@ def tool_search_regex(pattern: str, page: int = 1) -> dict[str, Any]:
         {"error": "..."} if the regex pattern is invalid.
 
     Example:
+        tool_search_regex("^get_weather$") -> exact match for get_weather
         tool_search_regex("weather_.*") -> tools starting with weather_
         tool_search_regex("email|calendar") -> tools matching email or calendar
     """
