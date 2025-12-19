@@ -33,6 +33,7 @@ class SkillSuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
         """
         self.top_k = top_k
         self._index_available: bool | None = None  # None = not checked yet
+        self._last_user_message: str | None = None  # Skip search if same message
 
     def _get_latest_user_message(self, messages: Sequence[Any]) -> str | None:
         """Extract the latest user message content."""
@@ -137,6 +138,11 @@ class SkillSuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
         if not user_msg:
             return request
 
+        # Skip search if same user message (e.g., tool call loop)
+        if user_msg == self._last_user_message:
+            return request
+
+        self._last_user_message = user_msg
         skills = self._search_skills(user_msg)
         suggestion = self._build_suggestion_text(skills) if skills else None
 
