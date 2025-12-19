@@ -1,15 +1,9 @@
 """Skill index using LanceDB for hybrid search."""
 
-import os
 import re
 import tempfile
 from pathlib import Path
 from typing import Any
-
-# Suppress tokenizers parallelism warning (must be set before importing transformers)
-os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-# Suppress LanceDB "No existing dataset" warning (we always create fresh temp DB)
-os.environ.setdefault("LANCEDB_LOG", "error")
 
 import lancedb
 import yaml
@@ -88,9 +82,7 @@ class SkillIndex:
 
             # Find other files in the skill directory (relative to skill dir)
             other_files = [
-                str(f.relative_to(skill_dir))
-                for f in skill_dir.rglob("*")
-                if f.is_file() and f.name != "SKILL.md"
+                str(f.relative_to(skill_dir)) for f in skill_dir.rglob("*") if f.is_file() and f.name != "SKILL.md"
             ]
 
             self._skill_metadata[name] = {
@@ -144,9 +136,7 @@ class SkillIndex:
         # Get embedding model (multilingual for better Japanese support)
         # NOTE: Downloads model on first run (~500MB) to ~/.cache/huggingface/
         # Subsequent runs use the cached model and work offline.
-        embeddings = get_registry().get("sentence-transformers").create(
-            name="paraphrase-multilingual-MiniLM-L12-v2"
-        )
+        embeddings = get_registry().get("sentence-transformers").create(name="paraphrase-multilingual-MiniLM-L12-v2")
 
         # Define schema with embedding
         class SkillDocument(LanceModel):  # type: ignore[misc]

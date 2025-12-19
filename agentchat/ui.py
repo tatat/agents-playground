@@ -23,14 +23,14 @@ def print_welcome(mode: str = "programmatic") -> None:
         description = (
             "A CLI chat with tool search and programmatic tool calling.\n\n"
             "[dim]The agent can:[/dim]\n"
-            "  - Search for tools with [cyan]tool_search_regex[/cyan]\n"
+            "  - Search for tools with [cyan]tool_search[/cyan] or [cyan]tool_search_regex[/cyan]\n"
             "  - Execute code in sandbox with [cyan]execute_code[/cyan]"
         )
     else:
         description = (
             "A CLI chat with direct tool calling.\n\n"
             "[dim]The agent can:[/dim]\n"
-            "  - Search for tools with [cyan]tool_search_regex[/cyan]\n"
+            "  - Search for tools with [cyan]tool_search[/cyan] or [cyan]tool_search_regex[/cyan]\n"
             "  - Call tools directly (weather, sales, calendar, etc.)"
         )
 

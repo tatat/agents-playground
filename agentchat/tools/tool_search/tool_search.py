@@ -1,13 +1,58 @@
-"""Tool search functionality for dynamic tool discovery."""
+"""Tool search tools for dynamic tool discovery."""
 
 import re
 from typing import Any
 
+import rich
 from langchain_core.tools import tool
 
-from .registry import TOOL_REGISTRY
+from ..registry import TOOL_REGISTRY
+from .index import get_tool_index
 
 PAGE_SIZE = 5
+
+
+@tool
+def tool_search(query: str, top_k: int = 5) -> dict[str, Any]:
+    """Search for tools by natural language query.
+
+    Use for semantic discovery like 'send messages' or 'get weather forecast'.
+
+    Args:
+        query: Natural language search query.
+        top_k: Maximum number of results to return (default 5).
+
+    Returns:
+        {"tools": [...], "message": "..."} with matching tool schemas.
+        {"tools": []} if no tools found or index unavailable.
+
+    Example:
+        tool_search("weather") -> tools related to weather
+        tool_search("send notifications") -> messaging/notification tools
+    """
+    try:
+        index = get_tool_index()
+
+        # Build index if not yet built
+        if index.table is None:
+            index.build_index(TOOL_REGISTRY)
+
+        results = index.search(query, top_k)
+
+        if not results:
+            return {"tools": [], "message": "No tools found."}
+
+        # Remove score from results (internal detail)
+        tools = [{k: v for k, v in r.items() if k != "score"} for r in results]
+
+        return {
+            "tools": tools,
+            "message": f"Found {len(tools)} tool(s).",
+        }
+
+    except Exception as e:  # noqa: BLE001
+        rich.print(f"[dim]Tool search error: {e}[/dim]")
+        return {"tools": [], "message": "Tool search unavailable."}
 
 
 @tool

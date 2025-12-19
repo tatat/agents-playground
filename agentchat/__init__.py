@@ -2,9 +2,14 @@
 
 import argparse
 import asyncio
+import os
 
-from .chat import direct_chat_loop, programmatic_chat_loop
-from .ui import print_info
+# Suppress warnings before importing libraries that trigger them
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")  # HuggingFace tokenizers fork warning
+os.environ.setdefault("LANCEDB_LOG", "error")  # LanceDB "No existing dataset" warning
+
+from .chat import direct_chat_loop, programmatic_chat_loop  # noqa: E402
+from .ui import print_info  # noqa: E402
 
 __version__ = "0.1.0"
 
