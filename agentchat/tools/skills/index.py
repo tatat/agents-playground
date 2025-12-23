@@ -6,14 +6,11 @@ from pathlib import Path
 from typing import Any
 
 import lancedb
-import numpy as np
 import yaml
 from lancedb.pydantic import LanceModel, Vector
 from lancedb.rerankers import RRFReranker
-from numpy.typing import NDArray
 
-from ..embeddings import encode_query as _encode_query
-from ..embeddings import get_embeddings
+from ..embeddings import encode_query, get_embeddings
 
 # YAML frontmatter pattern: starts with ---, ends with ---
 FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
@@ -69,17 +66,6 @@ class SkillIndex:
         if self.table is not None:
             return
         self.build_index()
-
-    def encode_query(self, query: str) -> NDArray[np.float32]:
-        """Encode a query string to a vector, using shared cache.
-
-        Args:
-            query: The query string to encode.
-
-        Returns:
-            The embedding vector as numpy array.
-        """
-        return _encode_query(query)
 
     def _scan_skills(self) -> list[dict[str, Any]]:
         """Scan skills directory and extract metadata from SKILL.md files."""
@@ -190,29 +176,7 @@ class SkillIndex:
         if self.table is None:
             return []
 
-        reranker = RRFReranker()
-
-        results = self.table.search(query, query_type="hybrid").rerank(reranker=reranker).limit(top_k).to_list()
-
-        return self._format_results(results)
-
-    def search_with_vector(
-        self, vector: NDArray[np.float32], query: str, top_k: int = 5
-    ) -> list[dict[str, Any]]:
-        """Search skills using pre-computed vector for hybrid search.
-
-        Args:
-            vector: Pre-computed query embedding vector.
-            query: Original query string (for FTS component of hybrid search).
-            top_k: Number of results to return.
-
-        Returns:
-            List of matching skills with scores.
-        """
-        self._ensure_index()
-        if self.table is None:
-            return []
-
+        vector = encode_query(query)
         reranker = RRFReranker()
 
         results = (

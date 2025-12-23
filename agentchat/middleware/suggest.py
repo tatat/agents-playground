@@ -23,7 +23,7 @@ class IndexConfig:
     index: SearchableIndex
     label: str  # e.g., "tools", "skills"
     marker_name: str  # e.g., "TOOL_SUGGESTIONS", "SKILL_SUGGESTIONS"
-    usage_hint: str  # e.g., "Use tool_search_regex('^name$') to enable these tools."
+    usage_hint: str | None = None  # e.g., "Use tool_search_regex('^name$') to enable these tools."
     format_item: Callable[[dict[str, Any]], str] = (
         lambda item: f"- {item.get('name', '?')}: {item.get('description', '')}"
     )
@@ -42,7 +42,6 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
 
     Searches multiple indexes for items matching the latest user message
     and injects suggestions into the system prompt before model call.
-    Encoding is done once and shared across all indexes.
     """
 
     def __init__(self, indexes: list[IndexConfig], top_k: int = 3):
@@ -72,18 +71,18 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
                                 return text
         return None
 
-    def _search_index(self, config: IndexConfig, query: str, vector: Any) -> list[dict[str, Any]]:
+    def _search_index(self, config: IndexConfig, query: str) -> list[dict[str, Any]]:
         """Search a single index. Returns empty list on failure."""
         if self._index_available.get(config.label) is False:
             return []
 
         try:
-            results = config.index.search_with_vector(vector, query, self.top_k)
+            results = config.index.search(query, self.top_k)
             self._index_available[config.label] = True
             return results
         except Exception as e:  # noqa: BLE001
             if self._index_available.get(config.label) is None:
-                rich.print(f"[dim]{config.label.title()} search unavailable: {e}[/dim]")
+                rich.print(f"[yellow]Warning: {config.label} search failed: {e}[/yellow]")
             self._index_available[config.label] = False
             return []
 
@@ -96,7 +95,8 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
         lines.append(f"Suggested {config.label} based on user's request:")
         for item in items:
             lines.append(config.format_item(item))
-        lines.append(config.usage_hint)
+        if config.usage_hint:
+            lines.append(config.usage_hint)
         lines.append(config.suggest_end)
 
         return "\n".join(lines)
@@ -164,23 +164,10 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
 
         self._last_user_message = user_msg
 
-        # Encode once using the first available index
-        vector = None
-        for config in self.indexes:
-            if self._index_available.get(config.label) is not False:
-                try:
-                    vector = config.index.encode_query(user_msg)
-                    break
-                except Exception:  # noqa: BLE001
-                    continue
-
-        if vector is None:
-            return request
-
-        # Search all indexes with the same vector
+        # Search all indexes
         suggestions: list[str] = []
         for config in self.indexes:
-            items = self._search_index(config, user_msg, vector)
+            items = self._search_index(config, user_msg)
             if items:
                 log_items = [(item.get("name", "?"), f"{item.get('score', 0):.2f}") for item in items]
                 rich.print(f"[cyan]Suggested {config.label}: {log_items}[/cyan]")
