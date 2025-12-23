@@ -13,15 +13,17 @@ from langgraph.graph.state import CompiledStateGraph
 
 from .llm import create_chat_model
 from .middleware import (
-    SkillSuggestMiddleware,
+    IndexConfig,
+    SuggestMiddleware,
     TokenUsageLoggingMiddleware,
     ToolSearchFilterMiddleware,
-    ToolSuggestMiddleware,
 )
 from .tools import (
     TOOL_REGISTRY,
     create_execute_code_tool,
     discover_mcp_servers,
+    get_skill_index,
+    get_tool_index,
     load_mcp_tools_to_registry,
     register_builtin_tools,
     tool_search,
@@ -194,11 +196,31 @@ class DirectModeAgentFactory:
         tools.extend(TOOL_REGISTRY.values())
         tools.extend(self.mcp_tools)
 
+        # Build tool index
+        tool_index = get_tool_index()
+        if tool_index.table is None:
+            tool_index.build_index(TOOL_REGISTRY)
+
         # Build middleware list
         middlewares: list[AgentMiddleware[Any, Any]] = [
             self.middleware,
-            ToolSuggestMiddleware(top_k=3),
-            SkillSuggestMiddleware(top_k=3),
+            SuggestMiddleware(
+                indexes=[
+                    IndexConfig(
+                        index=tool_index,
+                        label="tools",
+                        marker_name="TOOL_SUGGESTIONS",
+                        usage_hint="Use tool_search_regex('^name$') to enable these tools.",
+                    ),
+                    IndexConfig(
+                        index=get_skill_index(),
+                        label="skills",
+                        marker_name="SKILL_SUGGESTIONS",
+                        usage_hint="Use get_skill(name) to retrieve full skill content.",
+                    ),
+                ],
+                top_k=3,
+            ),
             TokenUsageLoggingMiddleware(),
             SummarizationMiddleware(
                 model=self.model,

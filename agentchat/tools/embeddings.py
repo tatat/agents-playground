@@ -1,10 +1,40 @@
 """Shared embeddings module with query caching."""
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
+
+
+class SearchableIndex(Protocol):
+    """Protocol for indexes that support hybrid search with encoding."""
+
+    def encode_query(self, query: str) -> NDArray[np.float32]:
+        """Encode a query string to a vector.
+
+        Args:
+            query: The query string to encode.
+
+        Returns:
+            The embedding vector.
+        """
+        ...
+
+    def search_with_vector(
+        self, vector: NDArray[np.float32], query: str, top_k: int = 5
+    ) -> list[dict[str, Any]]:
+        """Search using pre-computed vector.
+
+        Args:
+            vector: Pre-computed query embedding vector.
+            query: Original query string (for FTS component).
+            top_k: Number of results to return.
+
+        Returns:
+            List of results with name, description, and score.
+        """
+        ...
 
 
 @lru_cache(maxsize=1)

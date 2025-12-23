@@ -12,6 +12,7 @@ from lancedb.pydantic import LanceModel, Vector
 from lancedb.rerankers import RRFReranker
 from numpy.typing import NDArray
 
+from ..embeddings import encode_query as _encode_query
 from ..embeddings import get_embeddings
 
 # YAML frontmatter pattern: starts with ---, ends with ---
@@ -59,6 +60,17 @@ class SkillIndex:
         self.db = lancedb.connect(self._temp_dir)
         self.table: Any = None
         self._skill_metadata: dict[str, dict[str, Any]] = {}
+
+    def encode_query(self, query: str) -> NDArray[np.float32]:
+        """Encode a query string to a vector, using shared cache.
+
+        Args:
+            query: The query string to encode.
+
+        Returns:
+            The embedding vector as numpy array.
+        """
+        return _encode_query(query)
 
     def _scan_skills(self) -> list[dict[str, Any]]:
         """Scan skills directory and extract metadata from SKILL.md files."""

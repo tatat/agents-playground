@@ -1,13 +1,12 @@
 """Middleware for agent functionality."""
 
 from .logging import TokenUsageLoggingMiddleware
-from .skill_suggest import SkillSuggestMiddleware
+from .suggest import IndexConfig, SuggestMiddleware
 from .tool_filter import ToolSearchFilterMiddleware
-from .tool_suggest import ToolSuggestMiddleware
 
 __all__ = [
-    "SkillSuggestMiddleware",
+    "IndexConfig",
+    "SuggestMiddleware",
     "TokenUsageLoggingMiddleware",
     "ToolSearchFilterMiddleware",
-    "ToolSuggestMiddleware",
 ]

@@ -10,6 +10,7 @@ from lancedb.rerankers import RRFReranker
 from langchain_core.tools import BaseTool
 from numpy.typing import NDArray
 
+from ..embeddings import encode_query as _encode_query
 from ..embeddings import get_embeddings
 
 
@@ -21,6 +22,17 @@ class ToolIndex:
         self.db = lancedb.connect(self._temp_dir)
         self.table: Any = None
         self._tool_schemas: dict[str, dict[str, Any]] = {}
+
+    def encode_query(self, query: str) -> NDArray[np.float32]:
+        """Encode a query string to a vector, using shared cache.
+
+        Args:
+            query: The query string to encode.
+
+        Returns:
+            The embedding vector as numpy array.
+        """
+        return _encode_query(query)
 
     def build_index(self, tools: dict[str, BaseTool]) -> None:
         """Build the search index from tool registry.
