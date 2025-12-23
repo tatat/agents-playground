@@ -24,7 +24,7 @@ from .tools import (
     discover_mcp_servers,
     get_skill_index,
     get_tool_index,
-    load_mcp_tools_to_registry,
+    load_mcp_tools,
     register_builtin_tools,
     tool_search,
     tool_search_regex,
@@ -93,11 +93,16 @@ async def create_programmatic_agent(
 
     # Load MCP tools if servers exist
     exit_stack = AsyncExitStack()
+    mcp_tools: list[BaseTool] = []
     if discover_mcp_servers():
-        exit_stack, _ = await load_mcp_tools_to_registry()
+        exit_stack, mcp_tools = await load_mcp_tools()
 
-    # Create execute_code tool with access to registry
-    execute_code = create_execute_code_tool(TOOL_REGISTRY, srt_settings=SRT_SETTINGS_PATH)
+    # Build combined registry
+    all_tools = {**TOOL_REGISTRY, **{t.name: t for t in mcp_tools}}
+    get_tool_index(all_tools)
+
+    # Create execute_code tool with access to all tools
+    execute_code = create_execute_code_tool(all_tools, srt_settings=SRT_SETTINGS_PATH)
     tools: list[BaseTool] = [tool_search, tool_search_regex, execute_code]
 
     # Create the model
@@ -148,11 +153,18 @@ class DirectModeAgentFactory:
         self.model = create_chat_model(model_name)
         self.system_prompt = system_prompt or DIRECT_SYSTEM_PROMPT
         self.checkpointer: AsyncSqliteSaver | None = None
-        self.middleware = ToolSearchFilterMiddleware(TOOL_REGISTRY)
         self.hitl_tools = hitl_tools or set()
-        self.mcp_tools: list[BaseTool] = []
+        self._all_tools: dict[str, BaseTool] = {}
+        self._middleware: ToolSearchFilterMiddleware | None = None
         self._exit_stack: AsyncExitStack | None = None
         self._agent: CompiledStateGraph[Any] | None = None
+
+    @property
+    def middleware(self) -> ToolSearchFilterMiddleware:
+        """Get the tool filter middleware (must call initialize() first)."""
+        if self._middleware is None:
+            raise RuntimeError("Call initialize() before accessing middleware")
+        return self._middleware
 
     async def initialize(self) -> AsyncExitStack:
         """Initialize the factory by registering tools and checkpointer.
@@ -171,9 +183,14 @@ class DirectModeAgentFactory:
         )
 
         # Load MCP tools if servers exist
+        mcp_tools: list[BaseTool] = []
         if discover_mcp_servers():
-            mcp_stack, self.mcp_tools = await load_mcp_tools_to_registry()
+            mcp_stack, mcp_tools = await load_mcp_tools()
             await exit_stack.enter_async_context(mcp_stack)
+
+        # Build combined registry
+        self._all_tools = {**TOOL_REGISTRY, **{t.name: t for t in mcp_tools}}
+        self._middleware = ToolSearchFilterMiddleware(self._all_tools)
 
         self._exit_stack = exit_stack
         return exit_stack
@@ -191,23 +208,20 @@ class DirectModeAgentFactory:
         if self._agent is not None:
             return self._agent
 
+        if self._middleware is None:
+            raise RuntimeError("Call initialize() before create_agent()")
+
         # Register ALL tools - middleware will filter visibility
         tools: list[BaseTool] = [tool_search, tool_search_regex]
-        tools.extend(TOOL_REGISTRY.values())
-        tools.extend(self.mcp_tools)
-
-        # Build tool index
-        tool_index = get_tool_index()
-        if tool_index.table is None:
-            tool_index.build_index(TOOL_REGISTRY)
+        tools.extend(self._all_tools.values())
 
         # Build middleware list
         middlewares: list[AgentMiddleware[Any, Any]] = [
-            self.middleware,
+            self._middleware,
             SuggestMiddleware(
                 indexes=[
                     IndexConfig(
-                        index=tool_index,
+                        index=get_tool_index(self._all_tools),
                         label="tools",
                         marker_name="TOOL_SUGGESTIONS",
                         usage_hint="Use tool_search_regex('^name$') to enable these tools.",

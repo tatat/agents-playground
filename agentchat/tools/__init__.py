@@ -1,7 +1,7 @@
 """Tools package for agent chat."""
 
 from .builtin import register_builtin_tools
-from .mcp import discover_mcp_servers, load_mcp_tools_to_registry
+from .mcp import discover_mcp_servers, load_mcp_tools
 from .registry import TOOL_REGISTRY, get_all_tools, get_tool, register_tool
 from .sandbox import create_execute_code_tool
 from .skills import get_skill_index
@@ -15,7 +15,7 @@ __all__ = [
     "get_skill_index",
     "get_tool",
     "get_tool_index",
-    "load_mcp_tools_to_registry",
+    "load_mcp_tools",
     "register_builtin_tools",
     "register_tool",
     "tool_search",

@@ -51,7 +51,10 @@ _skill_index: "SkillIndex | None" = None
 
 
 class SkillIndex:
-    """In-memory skill index using LanceDB for hybrid search."""
+    """In-memory skill index using LanceDB for hybrid search.
+
+    Supports lazy loading: index is built automatically on first search.
+    """
 
     def __init__(self, skills_dir: Path = SKILLS_DIR) -> None:
         self.skills_dir = skills_dir
@@ -60,6 +63,12 @@ class SkillIndex:
         self.db = lancedb.connect(self._temp_dir)
         self.table: Any = None
         self._skill_metadata: dict[str, dict[str, Any]] = {}
+
+    def _ensure_index(self) -> None:
+        """Build index lazily if not already built."""
+        if self.table is not None:
+            return
+        self.build_index()
 
     def encode_query(self, query: str) -> NDArray[np.float32]:
         """Encode a query string to a vector, using shared cache.
@@ -177,6 +186,7 @@ class SkillIndex:
         Returns:
             List of matching skills with scores.
         """
+        self._ensure_index()
         if self.table is None:
             return []
 
@@ -199,6 +209,7 @@ class SkillIndex:
         Returns:
             List of matching skills with scores.
         """
+        self._ensure_index()
         if self.table is None:
             return []
 
@@ -239,9 +250,11 @@ class SkillIndex:
 
 
 def get_skill_index() -> SkillIndex:
-    """Get or create the global skill index."""
+    """Get or create the global skill index.
+
+    Index is built lazily on first search.
+    """
     global _skill_index
     if _skill_index is None:
         _skill_index = SkillIndex()
-        _skill_index.build_index()
     return _skill_index

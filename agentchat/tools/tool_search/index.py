@@ -5,6 +5,7 @@ from typing import Any
 
 import lancedb
 import numpy as np
+import rich
 from lancedb.pydantic import LanceModel, Vector
 from lancedb.rerankers import RRFReranker
 from langchain_core.tools import BaseTool
@@ -15,13 +16,44 @@ from ..embeddings import get_embeddings
 
 
 class ToolIndex:
-    """In-memory tool index using LanceDB for hybrid search."""
+    """In-memory tool index using LanceDB for hybrid search.
+
+    Supports lazy loading: index is built automatically on first search
+    using the registry provided via get_tool_index(registry=...).
+    """
 
     def __init__(self) -> None:
         self._temp_dir = tempfile.mkdtemp(prefix="lancedb_tools_")
         self.db = lancedb.connect(self._temp_dir)
         self.table: Any = None
         self._tool_schemas: dict[str, dict[str, Any]] = {}
+        self._registry: dict[str, BaseTool] | None = None
+        self._warned_no_registry = False
+
+    def set_registry(self, registry: dict[str, BaseTool]) -> None:
+        """Set the tool registry for lazy index building."""
+        self._registry = registry
+
+    @property
+    def registry(self) -> dict[str, BaseTool]:
+        """Get the tool registry."""
+        return self._registry or {}
+
+    def _ensure_index(self) -> None:
+        """Build index lazily if not already built."""
+        if self.table is not None:
+            return
+
+        if self._registry is None:
+            if not self._warned_no_registry:
+                rich.print(
+                    "[yellow]Warning: ToolIndex has no registry. "
+                    "Call get_tool_index(registry=...) first.[/yellow]"
+                )
+                self._warned_no_registry = True
+            return
+
+        self.build_index(self._registry)
 
     def encode_query(self, query: str) -> NDArray[np.float32]:
         """Encode a query string to a vector, using shared cache.
@@ -95,6 +127,7 @@ class ToolIndex:
         Returns:
             List of tool schemas with scores.
         """
+        self._ensure_index()
         if self.table is None:
             return []
 
@@ -117,6 +150,7 @@ class ToolIndex:
         Returns:
             List of tool schemas with scores.
         """
+        self._ensure_index()
         if self.table is None:
             return []
 
@@ -148,11 +182,23 @@ class ToolIndex:
 _tool_index: ToolIndex | None = None
 
 
-def get_tool_index() -> ToolIndex:
-    """Get or create the global tool index."""
+def get_tool_index(registry: dict[str, BaseTool] | None = None) -> ToolIndex:
+    """Get or create the global tool index.
+
+    Args:
+        registry: Tool registry for lazy index building. Required on first call,
+                  optional on subsequent calls (uses previously set registry).
+
+    Returns:
+        The global ToolIndex instance.
+    """
     global _tool_index
     if _tool_index is None:
         _tool_index = ToolIndex()
+
+    if registry is not None:
+        _tool_index.set_registry(registry)
+
     return _tool_index
 
 

@@ -6,7 +6,6 @@ from typing import Any
 import rich
 from langchain_core.tools import tool
 
-from ..registry import TOOL_REGISTRY
 from .index import get_tool_index
 
 PAGE_SIZE = 5
@@ -32,11 +31,6 @@ def tool_search(query: str, top_k: int = 5) -> dict[str, Any]:
     """
     try:
         index = get_tool_index()
-
-        # Build index if not yet built
-        if index.table is None:
-            index.build_index(TOOL_REGISTRY)
-
         results = index.search(query, top_k)
 
         if not results:
@@ -76,8 +70,9 @@ def tool_search_regex(pattern: str, page: int = 1) -> dict[str, Any]:
         tool_search_regex("email|calendar") -> tools matching email or calendar
     """
     matches: list[dict[str, Any]] = []
+    index = get_tool_index()
 
-    for name, t in TOOL_REGISTRY.items():
+    for name, t in index.registry.items():
         try:
             name_match = re.search(pattern, name, re.IGNORECASE)
             desc_match = re.search(pattern, t.description, re.IGNORECASE)
