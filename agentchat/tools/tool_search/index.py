@@ -4,10 +4,13 @@ import tempfile
 from typing import Any
 
 import lancedb
-from lancedb.embeddings import get_registry
+import numpy as np
 from lancedb.pydantic import LanceModel, Vector
 from lancedb.rerankers import RRFReranker
 from langchain_core.tools import BaseTool
+from numpy.typing import NDArray
+
+from ..embeddings import get_embeddings
 
 
 class ToolIndex:
@@ -53,8 +56,8 @@ class ToolIndex:
                 }
             )
 
-        # Get embedding model (same as SkillIndex)
-        embeddings = get_registry().get("sentence-transformers").create(name="paraphrase-multilingual-MiniLM-L12-v2")
+        # Get shared embedding model
+        embeddings = get_embeddings()
 
         # Define schema with embedding
         class ToolDocument(LanceModel):  # type: ignore[misc]
@@ -87,7 +90,39 @@ class ToolIndex:
 
         results = self.table.search(query, query_type="hybrid").rerank(reranker=reranker).limit(top_k).to_list()
 
-        # Return full schemas
+        return self._format_results(results)
+
+    def search_with_vector(
+        self, vector: NDArray[np.float32], query: str, top_k: int = 5
+    ) -> list[dict[str, Any]]:
+        """Search tools using pre-computed vector for hybrid search.
+
+        Args:
+            vector: Pre-computed query embedding vector.
+            query: Original query string (for FTS component of hybrid search).
+            top_k: Number of results to return.
+
+        Returns:
+            List of tool schemas with scores.
+        """
+        if self.table is None:
+            return []
+
+        reranker = RRFReranker()
+
+        results = (
+            self.table.search(query_type="hybrid")
+            .text(query)
+            .vector(vector)
+            .rerank(reranker=reranker)
+            .limit(top_k)
+            .to_list()
+        )
+
+        return self._format_results(results)
+
+    def _format_results(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Format search results with full schemas."""
         return [
             {
                 **self._tool_schemas.get(r["name"], {"name": r["name"]}),

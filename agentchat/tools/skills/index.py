@@ -6,10 +6,13 @@ from pathlib import Path
 from typing import Any
 
 import lancedb
+import numpy as np
 import yaml
-from lancedb.embeddings import get_registry
 from lancedb.pydantic import LanceModel, Vector
 from lancedb.rerankers import RRFReranker
+from numpy.typing import NDArray
+
+from ..embeddings import get_embeddings
 
 # YAML frontmatter pattern: starts with ---, ends with ---
 FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
@@ -133,10 +136,10 @@ class SkillIndex:
         if not skills:
             return
 
-        # Get embedding model (multilingual for better Japanese support)
+        # Get shared embedding model (multilingual for better Japanese support)
         # NOTE: Downloads model on first run (~500MB) to ~/.cache/huggingface/
         # Subsequent runs use the cached model and work offline.
-        embeddings = get_registry().get("sentence-transformers").create(name="paraphrase-multilingual-MiniLM-L12-v2")
+        embeddings = get_embeddings()
 
         # Define schema with embedding
         class SkillDocument(LanceModel):  # type: ignore[misc]
@@ -169,6 +172,39 @@ class SkillIndex:
 
         results = self.table.search(query, query_type="hybrid").rerank(reranker=reranker).limit(top_k).to_list()
 
+        return self._format_results(results)
+
+    def search_with_vector(
+        self, vector: NDArray[np.float32], query: str, top_k: int = 5
+    ) -> list[dict[str, Any]]:
+        """Search skills using pre-computed vector for hybrid search.
+
+        Args:
+            vector: Pre-computed query embedding vector.
+            query: Original query string (for FTS component of hybrid search).
+            top_k: Number of results to return.
+
+        Returns:
+            List of matching skills with scores.
+        """
+        if self.table is None:
+            return []
+
+        reranker = RRFReranker()
+
+        results = (
+            self.table.search(query_type="hybrid")
+            .text(query)
+            .vector(vector)
+            .rerank(reranker=reranker)
+            .limit(top_k)
+            .to_list()
+        )
+
+        return self._format_results(results)
+
+    def _format_results(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Format search results."""
         return [
             {
                 "name": r["name"],

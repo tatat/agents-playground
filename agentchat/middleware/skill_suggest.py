@@ -12,6 +12,7 @@ from langchain.agents.middleware.types import (
 )
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from ..tools.embeddings import encode_query
 from ..tools.skills import get_skill_index
 
 
@@ -60,7 +61,10 @@ class SkillSuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
         try:
             index = get_skill_index()
             self._index_available = True
-            return index.search(query, self.top_k)
+
+            # Use shared embeddings with cache to avoid duplicate encoding
+            vector = encode_query(query)
+            return index.search_with_vector(vector, query, self.top_k)
         except Exception as e:  # noqa: BLE001
             # Log once and disable future attempts
             if self._index_available is None:
