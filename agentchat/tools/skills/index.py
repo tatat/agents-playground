@@ -162,7 +162,7 @@ class SkillIndex:
         # Create FTS index for hybrid search
         self.table.create_fts_index("text")
 
-    def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+    async def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
         """Search skills using hybrid search (BM25 + vector).
 
         Args:

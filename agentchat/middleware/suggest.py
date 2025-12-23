@@ -71,13 +71,13 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
                                 return text
         return None
 
-    def _search_index(self, config: IndexConfig, query: str) -> list[dict[str, Any]]:
+    async def _search_index(self, config: IndexConfig, query: str) -> list[dict[str, Any]]:
         """Search a single index. Returns empty list on failure."""
         if self._index_available.get(config.label) is False:
             return []
 
         try:
-            results = config.index.search(query, self.top_k)
+            results = await config.index.search(query, self.top_k)
             self._index_available[config.label] = True
             return results
         except Exception as e:  # noqa: BLE001
@@ -153,7 +153,7 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
             id=system_message.id,
         )
 
-    def _process_request(self, request: ModelRequest) -> ModelRequest:
+    async def _process_request(self, request: ModelRequest) -> ModelRequest:
         """Process request: search all indexes and update system message."""
         user_msg = self._get_latest_user_message(request.messages)
         if not user_msg:
@@ -167,7 +167,7 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
         # Search all indexes
         suggestions: list[str] = []
         for config in self.indexes:
-            items = self._search_index(config, user_msg)
+            items = await self._search_index(config, user_msg)
             if items:
                 log_items = [(item.get("name", "?"), f"{item.get('score', 0):.2f}") for item in items]
                 rich.print(f"[cyan]Suggested {config.label}: {log_items}[/cyan]")
@@ -176,20 +176,11 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
         new_system = self._update_system_message(request.system_message, suggestions)
         return request.override(system_message=new_system)
 
-    def wrap_model_call(
-        self,
-        request: ModelRequest,
-        handler: Callable[[ModelRequest], ModelResponse],
-    ) -> ModelResponse:
-        """Search and inject suggestions (sync)."""
-        request = self._process_request(request)
-        return handler(request)
-
     async def awrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
         """Search and inject suggestions (async)."""
-        request = self._process_request(request)
+        request = await self._process_request(request)
         return await handler(request)

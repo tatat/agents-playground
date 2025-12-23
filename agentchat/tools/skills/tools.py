@@ -8,7 +8,7 @@ from .index import SKILLS_DIR, get_skill_index
 
 
 @tool
-def search_skills(query: str, top_k: int = 5) -> dict[str, Any]:
+async def search_skills(query: str, top_k: int = 5) -> dict[str, Any]:
     """Search for skills matching a query using hybrid search.
 
     Args:
@@ -19,7 +19,7 @@ def search_skills(query: str, top_k: int = 5) -> dict[str, Any]:
         {"query": str, "results": [{"name": str, "description": str, "score": float}, ...]}
     """
     index = get_skill_index()
-    results = index.search(query, top_k)
+    results = await index.search(query, top_k)
     return {"query": query, "results": results}
 
 

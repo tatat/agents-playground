@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 class SearchableIndex(Protocol):
     """Protocol for indexes that support search."""
 
-    def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+    async def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
         """Search for items matching the query.
 
         Args:
