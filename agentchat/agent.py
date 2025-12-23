@@ -135,6 +135,12 @@ class DirectModeAgentFactory:
     """Factory for creating direct mode agents with dynamic tool filtering.
 
     Uses filter pattern: all tools registered upfront, middleware filters visibility.
+
+    Usage as async context manager:
+        async with DirectModeAgentFactory(...) as factory:
+            # factory.middleware and factory.checkpointer available
+            agent = factory.create_agent()  # lazy creation
+            ...
     """
 
     def __init__(
@@ -159,19 +165,26 @@ class DirectModeAgentFactory:
         self._exit_stack: AsyncExitStack | None = None
         self._agent: CompiledStateGraph[Any] | None = None
 
+    async def __aenter__(self) -> "DirectModeAgentFactory":
+        """Enter context: initialize resources."""
+        await self._initialize()
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        """Exit context: cleanup resources."""
+        if self._exit_stack is not None:
+            await self._exit_stack.aclose()
+            self._exit_stack = None
+
     @property
-    def middleware(self) -> ToolSearchFilterMiddleware:
-        """Get the tool filter middleware (must call initialize() first)."""
+    def tool_filter(self) -> ToolSearchFilterMiddleware:
+        """Get the tool filter middleware (must enter context first)."""
         if self._middleware is None:
-            raise RuntimeError("Call initialize() before accessing middleware")
+            raise RuntimeError("Use 'async with' before accessing tool_filter")
         return self._middleware
 
-    async def initialize(self) -> AsyncExitStack:
-        """Initialize the factory by registering tools and checkpointer.
-
-        Returns:
-            Exit stack for resource management.
-        """
+    async def _initialize(self) -> None:
+        """Initialize the factory by registering tools and checkpointer."""
         register_builtin_tools()
 
         exit_stack = AsyncExitStack()
@@ -193,7 +206,6 @@ class DirectModeAgentFactory:
         self._middleware = ToolSearchFilterMiddleware(self._all_tools)
 
         self._exit_stack = exit_stack
-        return exit_stack
 
     def create_agent(self) -> CompiledStateGraph[Any]:
         """Create an agent with all tools registered.
@@ -209,7 +221,7 @@ class DirectModeAgentFactory:
             return self._agent
 
         if self._middleware is None:
-            raise RuntimeError("Call initialize() before create_agent()")
+            raise RuntimeError("Use 'async with' before create_agent()")
 
         # Register ALL tools - middleware will filter visibility
         tools: list[BaseTool] = [tool_search, tool_search_regex]

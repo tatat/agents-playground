@@ -159,45 +159,41 @@ async def direct_chat_loop(resume: bool = False) -> None:
     load_dotenv()
     print_welcome("direct")
 
-    # Create agent factory with HITL tools
-    factory = DirectModeAgentFactory(hitl_tools=set(HITL_TOOLS.keys()))
-    exit_stack = await factory.initialize()
+    async with DirectModeAgentFactory(hitl_tools=set(HITL_TOOLS.keys())) as factory:
+        # Select thread if resuming
+        thread_id: str | None = None
+        if resume and factory.checkpointer is not None:
+            thread_id = await aselect_thread_interactive(factory.checkpointer)
 
-    # Select thread if resuming
-    thread_id: str | None = None
-    if resume and factory.checkpointer is not None:
-        thread_id = await aselect_thread_interactive(factory.checkpointer)
+        # Restore discovered tools and messages if resuming
+        restored_messages: list[Any] = []
+        if thread_id is not None and factory.checkpointer is not None:
+            restored_messages = await aget_messages(thread_id, factory.checkpointer)
+            restored_tools = _extract_tools_from_messages(restored_messages)
+            factory.tool_filter.discovered_tools = restored_tools
 
-    # Restore discovered tools and messages if resuming
-    restored_messages: list[Any] = []
-    if thread_id is not None and factory.checkpointer is not None:
-        restored_messages = await aget_messages(thread_id, factory.checkpointer)
-        restored_tools = _extract_tools_from_messages(restored_messages)
-        factory.middleware.discovered_tools = restored_tools
+        # Create agent (all tools registered, middleware filters visibility)
+        agent = factory.create_agent()
 
-    # Create agent (all tools registered, middleware filters visibility)
-    agent = factory.create_agent()
-
-    if thread_id is None:
-        thread_id = str(uuid4())
-        print_info(f"New session: {thread_id[:8]}...")
-    else:
-        discovered = factory.middleware.discovered_tools
-        if discovered:
-            print_info(f"Resuming session: {thread_id[:8]}... (tools: {', '.join(discovered)})")
+        if thread_id is None:
+            thread_id = str(uuid4())
+            print_info(f"New session: {thread_id[:8]}...")
         else:
-            print_info(f"Resuming session: {thread_id[:8]}...")
-        # Show recent conversation
-        print_recent_messages(restored_messages, console)
-    console.print()
+            discovered = factory.tool_filter.discovered_tools
+            if discovered:
+                print_info(f"Resuming session: {thread_id[:8]}... (tools: {', '.join(discovered)})")
+            else:
+                print_info(f"Resuming session: {thread_id[:8]}...")
+            # Show recent conversation
+            print_recent_messages(restored_messages, console)
+        console.print()
 
-    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
-    session: PromptSession[str] = PromptSession(key_bindings=create_key_bindings())
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+        session: PromptSession[str] = PromptSession(key_bindings=create_key_bindings())
 
-    # Track approved calls for auto-approve (in-memory only)
-    approved_calls: set[tuple[str, ...]] = set()
+        # Track approved calls for auto-approve (in-memory only)
+        approved_calls: set[tuple[str, ...]] = set()
 
-    async with exit_stack:
         while True:
             try:
                 user_input = await session.prompt_async("> ", multiline=True)
