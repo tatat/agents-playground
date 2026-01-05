@@ -18,15 +18,15 @@ from langgraph.types import Command
 
 
 class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
-    """Middleware that filters tools based on tool_search/tool_search_regex results.
+    """Middleware that filters tools based on search tool results.
 
-    - Intercepts tool_search/tool_search_regex results to track discovered tools
+    - Intercepts tool_search/tool_search_regex/search_tools_or_skills results
     - Filters model requests to only show discovery tools + discovered tools
     - Saves tokens by hiding undiscovered tools from LLM
     """
 
     # Tools that are always visible (meta-tools for discovery)
-    ALWAYS_VISIBLE = {"tool_search", "tool_search_regex", "search_skills", "get_skill"}
+    ALWAYS_VISIBLE = {"tool_search", "tool_search_regex", "search_skills", "get_skill", "search_tools_or_skills"}
 
     def __init__(self, tool_registry: dict[str, BaseTool]):
         """Initialize middleware.
@@ -80,14 +80,13 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         return await handler(request)
 
     def _process_tool_search_result(self, request: ToolCallRequest, result: Any) -> None:
-        """Process tool_search/tool_search_regex results to track discovered tools."""
+        """Process tool search results to track discovered tools."""
         tool_name = request.tool.name if request.tool else ""
-        if tool_name not in ("tool_search", "tool_search_regex"):
+        if tool_name not in ("tool_search", "tool_search_regex", "search_tools_or_skills"):
             return
 
         # Extract tool names from the result
         # result.content may be a dict (native) or JSON string
-        # Format: {"tools": [...]} or {"error": "..."}
         content = result.content if hasattr(result, "content") else result
 
         tool_names: set[str] = set()
@@ -99,13 +98,21 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
             except json.JSONDecodeError:
                 pass
 
-        # Extract tools from {"tools": [...]} format
         if isinstance(content, dict):
+            # Format: {"tools": [...]} for tool_search/tool_search_regex
             tools_list = content.get("tools", [])
             if isinstance(tools_list, list):
                 for t in tools_list:
                     if isinstance(t, dict) and isinstance(name := t.get("name"), str):
                         tool_names.add(name)
+
+            # Format: {"results": [...]} for search_tools_or_skills (type="tool" only)
+            results_list = content.get("results", [])
+            if isinstance(results_list, list):
+                for r in results_list:
+                    if isinstance(r, dict) and r.get("type") == "tool":
+                        if isinstance(name := r.get("name"), str):
+                            tool_names.add(name)
 
         # Track discovered tools (no interrupt)
         for name in tool_names:
@@ -118,7 +125,7 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
     ) -> ToolMessage | Command[Any]:
-        """Intercept tool_search/tool_search_regex results to track discovered tools (sync)."""
+        """Intercept search tool results to track discovered tools (sync)."""
         result = handler(request)
         self._process_tool_search_result(request, result)
         return result
@@ -128,7 +135,7 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
     ) -> ToolMessage | Command[Any]:
-        """Intercept tool_search/tool_search_regex results to track discovered tools (async)."""
+        """Intercept search tool results to track discovered tools (async)."""
         result = await handler(request)
         self._process_tool_search_result(request, result)
         return result

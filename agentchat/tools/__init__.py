@@ -4,11 +4,13 @@ from .builtin import register_builtin_tools
 from .mcp import discover_mcp_servers, load_mcp_tools
 from .registry import TOOL_REGISTRY, get_all_tools, get_tool, register_tool
 from .sandbox import create_execute_code_tool
+from .search_tools_or_skills import SearchToolsOrSkillsTool
 from .skills import get_skill_index
 from .tool_search import get_tool_index, tool_search, tool_search_regex
 
 __all__ = [
     "TOOL_REGISTRY",
+    "SearchToolsOrSkillsTool",
     "create_execute_code_tool",
     "discover_mcp_servers",
     "get_all_tools",

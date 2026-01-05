@@ -11,6 +11,9 @@ from .index import SKILLS_DIR, get_skill_index
 async def search_skills(query: str, top_k: int = 5) -> dict[str, Any]:
     """Search for skills matching a query using hybrid search.
 
+    Skills are prompts and guides that provide instructions on how to accomplish tasks.
+    Unlike tools, skills are not executed directly but followed as guidance.
+
     Args:
         query: Search query for skill names/descriptions.
         top_k: Number of results to return (default: 5).

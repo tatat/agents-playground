@@ -20,6 +20,7 @@ from .middleware import (
 )
 from .tools import (
     TOOL_REGISTRY,
+    SearchToolsOrSkillsTool,
     create_execute_code_tool,
     discover_mcp_servers,
     get_skill_index,
@@ -223,8 +224,18 @@ class DirectModeAgentFactory:
         if self._middleware is None:
             raise RuntimeError("Use 'async with' before create_agent()")
 
+        # Create indexes (shared between SuggestMiddleware and SearchToolsOrSkillsTool)
+        tool_index = get_tool_index(self._all_tools)
+        skill_index = get_skill_index()
+
+        # Create search_tools_or_skills tool with shared indexes
+        search_tools_or_skills = SearchToolsOrSkillsTool(
+            tool_index=tool_index,
+            skill_index=skill_index,
+        )
+
         # Register ALL tools - middleware will filter visibility
-        tools: list[BaseTool] = [tool_search, tool_search_regex]
+        tools: list[BaseTool] = [tool_search, tool_search_regex, search_tools_or_skills]
         tools.extend(self._all_tools.values())
 
         # Build middleware list
@@ -233,12 +244,12 @@ class DirectModeAgentFactory:
             SuggestMiddleware(
                 indexes=[
                     IndexConfig(
-                        index=get_tool_index(self._all_tools),
+                        index=tool_index,
                         label="tool",
                         usage_hint="Use tool_search_regex('^name$') to enable tools.",
                     ),
                     IndexConfig(
-                        index=get_skill_index(),
+                        index=skill_index,
                         label="skill",
                         usage_hint="Use get_skill(name) to retrieve full skill content.",
                     ),

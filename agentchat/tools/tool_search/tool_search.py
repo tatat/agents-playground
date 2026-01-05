@@ -15,6 +15,7 @@ PAGE_SIZE = 5
 async def tool_search(query: str, top_k: int = 5) -> dict[str, Any]:
     """Search for tools by natural language query.
 
+    Tools are executable functions that perform actions and return results.
     Use when tool name is unknown. For known names, use tool_search_regex instead.
 
     Args:
