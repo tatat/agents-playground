@@ -21,35 +21,27 @@ class IndexConfig:
     """Configuration for a searchable index in the suggestion middleware."""
 
     index: SearchableIndex
-    label: str  # e.g., "tools", "skills"
-    marker_name: str  # e.g., "TOOL_SUGGESTIONS", "SKILL_SUGGESTIONS"
-    usage_hint: str | None = None  # e.g., "Use tool_search_regex('^name$') to enable these tools."
-    format_item: Callable[[dict[str, Any]], str] = (
-        lambda item: f"- {item.get('name', '?')}: {item.get('description', '')}"
-    )
+    label: str  # e.g., "tool", "skill" - used as prefix like [tool]
+    usage_hint: str | None = None  # e.g., "Use tool_search_regex('^name$') to enable tools."
 
-    @property
-    def suggest_start(self) -> str:
-        return f"[{self.marker_name}]"
 
-    @property
-    def suggest_end(self) -> str:
-        return f"[/{self.marker_name}]"
+_SUGGEST_START = "[SUGGESTIONS]"
+_SUGGEST_END = "[/SUGGESTIONS]"
 
 
 class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
     """Middleware that suggests relevant items from multiple indexes.
 
-    Searches multiple indexes for items matching the latest user message
-    and injects suggestions into the system prompt before model call.
+    Searches multiple indexes for items matching the latest user message,
+    merges results by score, and injects top-k suggestions into the system prompt.
     """
 
-    def __init__(self, indexes: list[IndexConfig], top_k: int = 3):
+    def __init__(self, indexes: list[IndexConfig], top_k: int = 5):
         """Initialize middleware.
 
         Args:
             indexes: List of index configurations.
-            top_k: Number of items to suggest per index.
+            top_k: Total number of items to suggest across all indexes.
         """
         self.indexes = indexes
         self.top_k = top_k
@@ -71,74 +63,78 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
                                 return text
         return None
 
-    async def _search_index(self, config: IndexConfig, query: str) -> list[dict[str, Any]]:
-        """Search a single index. Returns empty list on failure."""
+    async def _search_index(
+        self, config: IndexConfig, query: str, limit: int
+    ) -> list[tuple[IndexConfig, dict[str, Any]]]:
+        """Search a single index. Returns list of (config, item) tuples."""
         if self._index_available.get(config.label) is False:
             return []
 
         try:
-            results = await config.index.search(query, self.top_k)
+            results = await config.index.search(query, limit)
             self._index_available[config.label] = True
-            return results
+            return [(config, item) for item in results]
         except Exception as e:  # noqa: BLE001
             if self._index_available.get(config.label) is None:
                 rich.print(f"[yellow]Warning: {config.label} search failed: {e}[/yellow]")
             self._index_available[config.label] = False
             return []
 
-    def _build_suggestion_text(self, config: IndexConfig, items: list[dict[str, Any]]) -> str:
-        """Build suggestion text for a single index."""
+    def _build_suggestion_text(
+        self, items: list[tuple[IndexConfig, dict[str, Any]]]
+    ) -> str:
+        """Build unified suggestion text from merged results."""
         if not items:
             return ""
 
-        lines = [config.suggest_start]
-        lines.append(f"Suggested {config.label} based on user's request:")
-        for item in items:
-            lines.append(config.format_item(item))
-        if config.usage_hint:
-            lines.append(config.usage_hint)
-        lines.append(config.suggest_end)
+        lines = [_SUGGEST_START, "Suggested items based on user's request:"]
 
+        # Track which labels appear in results
+        labels_used: set[str] = set()
+
+        for config, item in items:
+            labels_used.add(config.label)
+            name = item.get("name", "?")
+            desc = item.get("description", "")
+            lines.append(f"- [{config.label}] {name}: {desc}")
+
+        # Add hints for labels that appear in results
+        lines.append("")
+        for config in self.indexes:
+            if config.label in labels_used and config.usage_hint:
+                lines.append(config.usage_hint)
+
+        lines.append(_SUGGEST_END)
         return "\n".join(lines)
 
     def _remove_old_suggestions(self, content: str) -> str:
-        """Remove all existing suggestion blocks from content."""
-        for config in self.indexes:
-            start_idx = content.find(config.suggest_start)
-            if start_idx == -1:
-                continue
+        """Remove existing suggestion block from content."""
+        start_idx = content.find(_SUGGEST_START)
+        if start_idx == -1:
+            return content
 
-            end_idx = content.find(config.suggest_end)
-            if end_idx == -1:
-                continue
+        end_idx = content.find(_SUGGEST_END)
+        if end_idx == -1:
+            return content
 
-            end_idx += len(config.suggest_end)
-            before = content[:start_idx].rstrip()
-            after = content[end_idx:].lstrip()
+        end_idx += len(_SUGGEST_END)
+        before = content[:start_idx].rstrip()
+        after = content[end_idx:].lstrip()
 
-            if before and after:
-                content = f"{before}\n\n{after}"
-            else:
-                content = before or after
-
-        return content
+        if before and after:
+            return f"{before}\n\n{after}"
+        return before or after
 
     def _update_system_message(
-        self, system_message: SystemMessage | None, suggestions: list[str]
+        self, system_message: SystemMessage | None, suggestion_text: str
     ) -> SystemMessage | None:
         """Update system message with suggestions."""
-        suggestion_text = "\n\n".join(s for s in suggestions if s)
-
         if system_message is None:
             if suggestion_text:
                 return SystemMessage(content=suggestion_text)
             return None
 
-        content = (
-            system_message.content
-            if isinstance(system_message.content, str)
-            else str(system_message.content)
-        )
+        content = system_message.content if isinstance(system_message.content, str) else str(system_message.content)
         clean_content = self._remove_old_suggestions(content)
 
         if suggestion_text:
@@ -154,7 +150,7 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
         )
 
     async def _process_request(self, request: ModelRequest) -> ModelRequest:
-        """Process request: search all indexes and update system message."""
+        """Process request: search all indexes, merge by score, update system message."""
         user_msg = self._get_latest_user_message(request.messages)
         if not user_msg:
             return request
@@ -164,16 +160,25 @@ class SuggestMiddleware(AgentMiddleware[AgentState[Any], Any]):
 
         self._last_user_message = user_msg
 
-        # Search all indexes
-        suggestions: list[str] = []
+        # Search all indexes and collect results
+        all_results: list[tuple[IndexConfig, dict[str, Any]]] = []
         for config in self.indexes:
-            items = await self._search_index(config, user_msg)
-            if items:
-                log_items = [(item.get("name", "?"), f"{item.get('score', 0):.2f}") for item in items]
-                rich.print(f"[cyan]Suggested {config.label}: {log_items}[/cyan]")
-                suggestions.append(self._build_suggestion_text(config, items))
+            results = await self._search_index(config, user_msg, self.top_k)
+            all_results.extend(results)
 
-        new_system = self._update_system_message(request.system_message, suggestions)
+        # Sort by score (higher is better) and take top-k
+        all_results.sort(key=lambda x: x[1].get("score", 0), reverse=True)
+        top_items = all_results[: self.top_k]
+
+        if top_items:
+            log_items = [
+                (f"[{cfg.label}] {item.get('name', '?')}", f"{item.get('score', 0):.2f}")
+                for cfg, item in top_items
+            ]
+            rich.print(f"[cyan]Suggestions: {log_items}[/cyan]")
+
+        suggestion_text = self._build_suggestion_text(top_items)
+        new_system = self._update_system_message(request.system_message, suggestion_text)
         return request.override(system_message=new_system)
 
     async def awrap_model_call(

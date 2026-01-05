@@ -234,18 +234,16 @@ class DirectModeAgentFactory:
                 indexes=[
                     IndexConfig(
                         index=get_tool_index(self._all_tools),
-                        label="tools",
-                        marker_name="TOOL_SUGGESTIONS",
-                        usage_hint="Use tool_search_regex('^name$') to enable these tools.",
+                        label="tool",
+                        usage_hint="Use tool_search_regex('^name$') to enable tools.",
                     ),
                     IndexConfig(
                         index=get_skill_index(),
-                        label="skills",
-                        marker_name="SKILL_SUGGESTIONS",
+                        label="skill",
                         usage_hint="Use get_skill(name) to retrieve full skill content.",
                     ),
                 ],
-                top_k=3,
+                top_k=5,
             ),
             TokenUsageLoggingMiddleware(),
             SummarizationMiddleware(
