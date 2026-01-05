@@ -23,10 +23,12 @@ from .tools import (
     SearchToolsOrSkillsTool,
     create_execute_code_tool,
     discover_mcp_servers,
+    get_skill,
     get_skill_index,
     get_tool_index,
     load_mcp_tools,
     register_builtin_tools,
+    search_skills,
     tool_search,
     tool_search_regex,
 )
@@ -98,13 +100,14 @@ async def create_programmatic_agent(
     if discover_mcp_servers():
         exit_stack, mcp_tools = await load_mcp_tools()
 
-    # Build combined registry
-    all_tools = {**TOOL_REGISTRY, **{t.name: t for t in mcp_tools}}
-    get_tool_index(all_tools)
+    # Build sandbox tools registry (tools callable via tool_call() in execute_code)
+    sandbox_tools = {**TOOL_REGISTRY, **{t.name: t for t in mcp_tools}}
+    get_tool_index(sandbox_tools)
 
-    # Create execute_code tool with access to all tools
-    execute_code = create_execute_code_tool(all_tools, srt_settings=SRT_SETTINGS_PATH)
-    tools: list[BaseTool] = [tool_search, tool_search_regex, execute_code]
+    # Create execute_code tool with access to sandbox tools
+    execute_code = create_execute_code_tool(sandbox_tools, srt_settings=SRT_SETTINGS_PATH)
+    # Skill tools are for LLM reference, not for execute_code
+    tools: list[BaseTool] = [tool_search, tool_search_regex, execute_code, search_skills, get_skill]
 
     # Create the model
     model = create_chat_model(model_name)
@@ -161,7 +164,7 @@ class DirectModeAgentFactory:
         self.system_prompt = system_prompt or DIRECT_SYSTEM_PROMPT
         self.checkpointer: AsyncSqliteSaver | None = None
         self.hitl_tools = hitl_tools or set()
-        self._all_tools: dict[str, BaseTool] = {}
+        self._registered_tools: dict[str, BaseTool] = {}
         self._middleware: ToolSearchFilterMiddleware | None = None
         self._exit_stack: AsyncExitStack | None = None
         self._agent: CompiledStateGraph[Any] | None = None
@@ -203,8 +206,8 @@ class DirectModeAgentFactory:
             await exit_stack.enter_async_context(mcp_stack)
 
         # Build combined registry
-        self._all_tools = {**TOOL_REGISTRY, **{t.name: t for t in mcp_tools}}
-        self._middleware = ToolSearchFilterMiddleware(self._all_tools)
+        self._registered_tools = {**TOOL_REGISTRY, **{t.name: t for t in mcp_tools}}
+        self._middleware = ToolSearchFilterMiddleware(self._registered_tools)
 
         self._exit_stack = exit_stack
 
@@ -225,7 +228,7 @@ class DirectModeAgentFactory:
             raise RuntimeError("Use 'async with' before create_agent()")
 
         # Create indexes (shared between SuggestMiddleware and SearchToolsOrSkillsTool)
-        tool_index = get_tool_index(self._all_tools)
+        tool_index = get_tool_index(self._registered_tools)
         skill_index = get_skill_index()
 
         # Create search_tools_or_skills tool with shared indexes
@@ -235,8 +238,15 @@ class DirectModeAgentFactory:
         )
 
         # Register ALL tools - middleware will filter visibility
-        tools: list[BaseTool] = [tool_search, tool_search_regex, search_tools_or_skills]
-        tools.extend(self._all_tools.values())
+        # Skill tools are added directly (not via registry) since they're only for direct mode
+        tools: list[BaseTool] = [
+            tool_search,
+            tool_search_regex,
+            search_tools_or_skills,
+            search_skills,
+            get_skill,
+        ]
+        tools.extend(self._registered_tools.values())
 
         # Build middleware list
         middlewares: list[AgentMiddleware[Any, Any]] = [

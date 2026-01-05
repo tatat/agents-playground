@@ -5,7 +5,6 @@ from typing import Any
 from langchain_core.tools import tool
 
 from .registry import register_tool
-from .skills import get_skill, search_skills
 
 
 @tool
@@ -140,7 +139,5 @@ def register_builtin_tools() -> None:
         create_calendar_event,
         list_calendar_events,
         read_emails,
-        search_skills,
-        get_skill,
     ]:
         register_tool(t)
