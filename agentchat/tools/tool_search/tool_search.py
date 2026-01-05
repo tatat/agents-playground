@@ -115,3 +115,22 @@ def tool_search_regex(pattern: str, page: int = 1) -> dict[str, Any]:
         "page": page,
         "total": total_matches,
     }
+
+
+@tool
+def enable_tool(name: str) -> dict[str, Any]:
+    """Enable a tool by name for use.
+
+    Use when you know the exact tool name and want to enable it without searching.
+
+    Args:
+        name: Exact tool name to enable.
+
+    Returns:
+        {"tools": [{"name": str}], "message": str} if tool exists.
+        {"tools": [], "message": str} if tool not found.
+    """
+    index = get_tool_index()
+    if name in index.registry:
+        return {"tools": [{"name": name}], "message": f"Enabled: {name}"}
+    return {"tools": [], "message": f"Tool not found: {name}"}

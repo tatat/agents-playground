@@ -23,6 +23,7 @@ from .tools import (
     SearchToolsOrSkillsTool,
     create_execute_code_tool,
     discover_mcp_servers,
+    enable_tool,
     get_skill,
     get_skill_index,
     get_tool_index,
@@ -107,7 +108,7 @@ async def create_programmatic_agent(
     # Create execute_code tool with access to sandbox tools
     execute_code = create_execute_code_tool(sandbox_tools, srt_settings=SRT_SETTINGS_PATH)
     # Skill tools are for LLM reference, not for execute_code
-    tools: list[BaseTool] = [tool_search, tool_search_regex, execute_code, search_skills, get_skill]
+    tools: list[BaseTool] = [tool_search, tool_search_regex, enable_tool, execute_code, search_skills, get_skill]
 
     # Create the model
     model = create_chat_model(model_name)
@@ -242,6 +243,7 @@ class DirectModeAgentFactory:
         tools: list[BaseTool] = [
             tool_search,
             tool_search_regex,
+            enable_tool,
             search_tools_or_skills,
             search_skills,
             get_skill,
@@ -256,7 +258,7 @@ class DirectModeAgentFactory:
                     IndexConfig(
                         index=tool_index,
                         label="tool",
-                        usage_hint="Use tool_search_regex('^name$') to enable tools.",
+                        usage_hint="Use enable_tool(name) to enable tools.",
                     ),
                     IndexConfig(
                         index=skill_index,

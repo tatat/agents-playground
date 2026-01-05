@@ -26,7 +26,14 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
     """
 
     # Tools that are always visible (meta-tools for discovery)
-    ALWAYS_VISIBLE = {"tool_search", "tool_search_regex", "search_skills", "get_skill", "search_tools_or_skills"}
+    ALWAYS_VISIBLE = {
+        "tool_search",
+        "tool_search_regex",
+        "enable_tool",
+        "search_skills",
+        "get_skill",
+        "search_tools_or_skills",
+    }
 
     def __init__(self, tool_registry: dict[str, BaseTool]):
         """Initialize middleware.
@@ -82,7 +89,7 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
     def _process_tool_search_result(self, request: ToolCallRequest, result: Any) -> None:
         """Process tool search results to track discovered tools."""
         tool_name = request.tool.name if request.tool else ""
-        if tool_name not in ("tool_search", "tool_search_regex", "search_tools_or_skills"):
+        if tool_name not in ("tool_search", "tool_search_regex", "enable_tool", "search_tools_or_skills"):
             return
 
         # Extract tool names from the result
@@ -120,12 +127,26 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
                 self.discovered_tools.add(name)
                 rich.print(f"[yellow]Discovered: {name}[/yellow]")
 
+    def _check_tool_enabled(self, request: ToolCallRequest) -> ToolMessage | None:
+        """Check if tool is enabled. Returns error ToolMessage if not."""
+        tool_name = request.tool.name if request.tool else ""
+        if tool_name in self.ALWAYS_VISIBLE or tool_name in self.discovered_tools:
+            return None
+        # Tool not enabled - return error
+        rich.print(f"[red]Blocked: {tool_name} (not enabled)[/red]")
+        return ToolMessage(
+            content=f"Error: Tool '{tool_name}' is not enabled. Use enable_tool('{tool_name}') first.",
+            tool_call_id=request.tool_call.get("id", ""),
+        )
+
     def wrap_tool_call(
         self,
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
     ) -> ToolMessage | Command[Any]:
         """Intercept search tool results to track discovered tools (sync)."""
+        if error := self._check_tool_enabled(request):
+            return error
         result = handler(request)
         self._process_tool_search_result(request, result)
         return result
@@ -136,6 +157,8 @@ class ToolSearchFilterMiddleware(AgentMiddleware[AgentState[Any], Any]):
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
     ) -> ToolMessage | Command[Any]:
         """Intercept search tool results to track discovered tools (async)."""
+        if error := self._check_tool_enabled(request):
+            return error
         result = await handler(request)
         self._process_tool_search_result(request, result)
         return result
