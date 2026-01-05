@@ -166,7 +166,7 @@ class DirectModeAgentFactory:
         self.checkpointer: AsyncSqliteSaver | None = None
         self.hitl_tools = hitl_tools or set()
         self._registered_tools: dict[str, BaseTool] = {}
-        self._middleware: ToolSearchFilterMiddleware | None = None
+        self._tool_filter: ToolSearchFilterMiddleware | None = None
         self._exit_stack: AsyncExitStack | None = None
         self._agent: CompiledStateGraph[Any] | None = None
 
@@ -184,9 +184,9 @@ class DirectModeAgentFactory:
     @property
     def tool_filter(self) -> ToolSearchFilterMiddleware:
         """Get the tool filter middleware (must enter context first)."""
-        if self._middleware is None:
+        if self._tool_filter is None:
             raise RuntimeError("Use 'async with' before accessing tool_filter")
-        return self._middleware
+        return self._tool_filter
 
     async def _initialize(self) -> None:
         """Initialize the factory by registering tools and checkpointer."""
@@ -208,7 +208,7 @@ class DirectModeAgentFactory:
 
         # Build combined registry
         self._registered_tools = {**TOOL_REGISTRY, **{t.name: t for t in mcp_tools}}
-        self._middleware = ToolSearchFilterMiddleware(self._registered_tools)
+        self._tool_filter = ToolSearchFilterMiddleware(self._registered_tools)
 
         self._exit_stack = exit_stack
 
@@ -225,7 +225,7 @@ class DirectModeAgentFactory:
         if self._agent is not None:
             return self._agent
 
-        if self._middleware is None:
+        if self._tool_filter is None:
             raise RuntimeError("Use 'async with' before create_agent()")
 
         # Create indexes (shared between SuggestMiddleware and SearchToolsOrSkillsTool)
@@ -252,7 +252,7 @@ class DirectModeAgentFactory:
 
         # Build middleware list
         middlewares: list[AgentMiddleware[Any, Any]] = [
-            self._middleware,
+            self._tool_filter,
             SuggestMiddleware(
                 indexes=[
                     IndexConfig(
